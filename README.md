@@ -67,7 +67,7 @@ The client service runs:
 ```bash
 gost \
   -L=tcp://127.0.0.1:3333/pearl-ca1.luckypool.io:3360 \
-  -F=relay+tls://45.62.123.12:8443
+  -F=relay+tls://YOUR_SERVER_IP_OR_DOMAIN:8443
 ```
 
 Configuration:

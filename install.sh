@@ -36,6 +36,21 @@ prompt_with_default() {
   echo "${value:-${default_value}}"
 }
 
+prompt_required() {
+  local prompt="$1"
+  local value
+
+  while true; do
+    read -r -p "${prompt}: " value
+    if [[ -n "${value}" ]]; then
+      echo "${value}"
+      return
+    fi
+
+    echo "This value is required."
+  done
+}
+
 install_gost_if_missing() {
   if command -v gost >/dev/null 2>&1; then
     return
@@ -75,7 +90,7 @@ configure_project() {
   sed -i "s|^GOST_BIN=.*|GOST_BIN=${gost_bin}|" "${INSTALL_DIR}/configs/client.env"
 
   if [[ "${role}" == "client" || "${role}" == "both" ]]; then
-    server_ip="$(prompt_with_default "Server public IP or domain" "45.62.123.12")"
+    server_ip="$(prompt_required "Server public IP or domain")"
     local_port="$(prompt_with_default "Local listen port" "3333")"
     target_host="$(prompt_with_default "Target host" "pearl-ca1.luckypool.io")"
     target_port="$(prompt_with_default "Target port" "3360")"
