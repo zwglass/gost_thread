@@ -1,0 +1,16 @@
+[Unit]
+Description=GOST Relay TLS Client Tunnel
+Documentation=https://github.com/go-gost/gost
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/gost-thread/client.env
+ExecStart=/bin/sh -c '${GOST_BIN} -L=${LOCAL_FORWARD} -F=${REMOTE_RELAY}'
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

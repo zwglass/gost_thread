@@ -1,0 +1,16 @@
+[Unit]
+Description=GOST Relay TLS Server
+Documentation=https://github.com/go-gost/gost
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/gost-thread/server.env
+ExecStart=/bin/sh -c '${GOST_BIN} -L=${SERVER_LISTEN}'
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
