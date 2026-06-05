@@ -112,6 +112,7 @@ sudo ./scripts/install_lpminer.sh
 ```
 
 The service requires `gost-client.service`, so install and start the client tunnel first.
+It waits for `127.0.0.1:3333` before starting the miner.
 
 ## Install
 
