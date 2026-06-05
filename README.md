@@ -94,6 +94,16 @@ Client machine:
 curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo bash -s -- client
 ```
 
+Client machine without interactive prompts:
+
+```bash
+curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo env \
+  GOST_SERVER_HOST=YOUR_SERVER_IP_OR_DOMAIN \
+  GOST_AUTH_USER=gostuser \
+  GOST_AUTH_PASSWORD=CHANGE_ME_PASSWORD \
+  bash -s -- client
+```
+
 Interactive mode:
 
 ```bash
@@ -113,6 +123,18 @@ The installer will:
 
 Use the same GOST username and password on the server and client.
 The username and password may contain only letters, numbers, dot, underscore, and hyphen.
+
+Environment variables supported by the installer:
+
+```text
+GOST_SERVER_HOST      # required for client or both
+GOST_AUTH_USER        # default: gostuser
+GOST_AUTH_PASSWORD    # required
+GOST_SERVER_PORT      # default: 8443
+GOST_LOCAL_PORT       # default: 3333
+GOST_TARGET_HOST      # default: pearl-ca1.luckypool.io
+GOST_TARGET_PORT      # default: 3360
+```
 
 You can override the repository URL:
 
