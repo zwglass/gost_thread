@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_URL="${GOST_THREAD_REPO:-https://github.com/zwglass/gost_thread}"
-BRANCH="${GOST_THREAD_BRANCH:-main}"
+BRANCH="${GOST_THREAD_BRANCH:-master}"
 INSTALL_DIR="${GOST_THREAD_INSTALL_DIR:-/opt/gost_thread}"
 TMP_DIR="$(mktemp -d)"
 

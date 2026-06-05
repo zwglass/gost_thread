@@ -85,19 +85,19 @@ Use the GitHub installer from `zwglass/gost_thread`.
 Server machine:
 
 ```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/main/install.sh | sudo bash -s -- server
+curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo bash -s -- server
 ```
 
 Client machine:
 
 ```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/main/install.sh | sudo bash -s -- client
+curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo bash -s -- client
 ```
 
 Interactive mode:
 
 ```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/main/install.sh | sudo bash
+curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo bash
 ```
 
 The installer will:
@@ -113,7 +113,7 @@ The installer will:
 You can override the repository URL:
 
 ```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/main/install.sh | sudo env GOST_THREAD_REPO=https://github.com/zwglass/gost_thread bash -s -- client
+curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo env GOST_THREAD_REPO=https://github.com/zwglass/gost_thread bash -s -- client
 ```
 
 ### Local Install
