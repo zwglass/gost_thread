@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${GOST_THREAD_REPO:-https://github.com/YOUR_GITHUB_USERNAME/gost_thread}"
+REPO_URL="${GOST_THREAD_REPO:-https://github.com/zwglass/gost_thread}"
 BRANCH="${GOST_THREAD_BRANCH:-main}"
 INSTALL_DIR="${GOST_THREAD_INSTALL_DIR:-/opt/gost_thread}"
 TMP_DIR="$(mktemp -d)"
