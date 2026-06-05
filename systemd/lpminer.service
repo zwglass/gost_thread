@@ -1,0 +1,16 @@
+[Unit]
+Description=LP Miner
+After=network-online.target gost-client.service
+Wants=network-online.target
+Requires=gost-client.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/gost-thread/lpminer.env
+ExecStart=/bin/sh -c 'cd "${LPMINER_WORKDIR}" && exec "${LPMINER_BIN}" --algo "${LPMINER_ALGO}" --pool "${LPMINER_POOL}" --wallet "${LPMINER_WALLET}" --worker "${LPMINER_WORKER}"'
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

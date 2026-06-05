@@ -15,17 +15,22 @@ The process is managed by systemd, so it can:
 configs/
   server.env              # server listen config
   client.env              # client forward config
+  lpminer.env             # lpminer config
 scripts/
   install_gost.sh         # install config and systemd services
+  install_lpminer.sh      # install lpminer systemd service
   start_server.sh
   start_client.sh
+  start_lpminer.sh
   stop_server.sh
   stop_client.sh
+  stop_lpminer.sh
   status.sh
   uninstall.sh
 systemd/
   gost-server.service
   gost-client.service
+  lpminer.service
 logs/
 ```
 
@@ -75,6 +80,38 @@ Configuration:
 ```bash
 configs/client.env
 ```
+
+## LP Miner
+
+The lpminer service runs behind the local client tunnel:
+
+```bash
+./lpminer \
+  --algo pearl \
+  --pool stratum+tcp://127.0.0.1:3333 \
+  --wallet prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma \
+  --worker rtx3090
+```
+
+Configuration:
+
+```bash
+configs/lpminer.env
+```
+
+Default expected binary:
+
+```bash
+/root/programs/lpminer
+```
+
+Install lpminer as a systemd service on the client machine:
+
+```bash
+sudo ./scripts/install_lpminer.sh
+```
+
+The service requires `gost-client.service`, so install and start the client tunnel first.
 
 ## Install
 
@@ -185,6 +222,13 @@ Client:
 ./scripts/stop_client.sh
 ```
 
+LP Miner:
+
+```bash
+./scripts/start_lpminer.sh
+./scripts/stop_lpminer.sh
+```
+
 Status:
 
 ```bash
@@ -201,6 +245,10 @@ sudo systemctl status gost-server
 sudo systemctl start gost-client
 sudo systemctl stop gost-client
 sudo systemctl status gost-client
+
+sudo systemctl start lpminer
+sudo systemctl stop lpminer
+sudo systemctl status lpminer
 ```
 
 ## Logs
@@ -210,6 +258,7 @@ Use journalctl:
 ```bash
 sudo journalctl -u gost-server -f
 sudo journalctl -u gost-client -f
+sudo journalctl -u lpminer -f
 ```
 
 ## Uninstall
