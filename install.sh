@@ -27,12 +27,20 @@ require_command() {
   fi
 }
 
+require_tty() {
+  if [[ ! -r /dev/tty ]]; then
+    echo "Interactive install requires a TTY."
+    echo "Run this command from a normal SSH terminal, or clone the repo and run install.sh locally."
+    exit 1
+  fi
+}
+
 prompt_with_default() {
   local prompt="$1"
   local default_value="$2"
   local value
 
-  read -r -p "${prompt} [${default_value}]: " value
+  read -r -p "${prompt} [${default_value}]: " value </dev/tty
   echo "${value:-${default_value}}"
 }
 
@@ -41,13 +49,13 @@ prompt_required() {
   local value
 
   while true; do
-    read -r -p "${prompt}: " value
+    read -r -p "${prompt}: " value </dev/tty
     if [[ -n "${value}" ]]; then
       echo "${value}"
       return
     fi
 
-    echo "This value is required."
+    echo "This value is required." >/dev/tty
   done
 }
 
@@ -56,15 +64,15 @@ prompt_secret() {
   local value
 
   while true; do
-    read -r -s -p "${prompt}: " value
-    echo
+    read -r -s -p "${prompt}: " value </dev/tty
+    echo >/dev/tty
 
     if [[ -n "${value}" ]]; then
       echo "${value}"
       return
     fi
 
-    echo "This value is required."
+    echo "This value is required." >/dev/tty
   done
 }
 
@@ -164,13 +172,14 @@ main() {
   require_command tar
   require_command sed
   require_command systemctl
+  require_tty
 
   if [[ -z "${role}" ]]; then
-    echo "Choose install role:"
-    echo "  1) server"
-    echo "  2) client"
-    echo "  3) both"
-    read -r -p "Role [client]: " role
+    echo "Choose install role:" >/dev/tty
+    echo "  1) server" >/dev/tty
+    echo "  2) client" >/dev/tty
+    echo "  3) both" >/dev/tty
+    read -r -p "Role [client]: " role </dev/tty
 
     case "${role:-client}" in
       1 | server) role="server" ;;
