@@ -51,6 +51,33 @@ prompt_required() {
   done
 }
 
+prompt_secret() {
+  local prompt="$1"
+  local value
+
+  while true; do
+    read -r -s -p "${prompt}: " value
+    echo
+
+    if [[ -n "${value}" ]]; then
+      echo "${value}"
+      return
+    fi
+
+    echo "This value is required."
+  done
+}
+
+validate_credential() {
+  local name="$1"
+  local value="$2"
+
+  if [[ ! "${value}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "${name} can only contain letters, numbers, dot, underscore, and hyphen."
+    exit 1
+  fi
+}
+
 install_gost_if_missing() {
   if command -v gost >/dev/null 2>&1; then
     return
@@ -80,14 +107,24 @@ configure_project() {
   local local_port
   local target_host
   local target_port
+  local gost_user
+  local gost_password
 
   gost_bin="$(command -v gost)"
   server_port="$(prompt_with_default "Server relay port" "8443")"
+  gost_user="$(prompt_with_default "GOST username" "gostuser")"
+  gost_password="$(prompt_secret "GOST password")"
+  validate_credential "GOST username" "${gost_user}"
+  validate_credential "GOST password" "${gost_password}"
 
   sed -i "s|^GOST_BIN=.*|GOST_BIN=${gost_bin}|" "${INSTALL_DIR}/configs/server.env"
-  sed -i "s|^SERVER_LISTEN=.*|SERVER_LISTEN=relay+tls://0.0.0.0:${server_port}|" "${INSTALL_DIR}/configs/server.env"
+  sed -i "s|^GOST_USER=.*|GOST_USER=${gost_user}|" "${INSTALL_DIR}/configs/server.env"
+  sed -i "s|^GOST_PASSWORD=.*|GOST_PASSWORD=${gost_password}|" "${INSTALL_DIR}/configs/server.env"
+  sed -i "s|^SERVER_LISTEN=.*|SERVER_LISTEN=relay+tls://${gost_user}:${gost_password}@0.0.0.0:${server_port}|" "${INSTALL_DIR}/configs/server.env"
 
   sed -i "s|^GOST_BIN=.*|GOST_BIN=${gost_bin}|" "${INSTALL_DIR}/configs/client.env"
+  sed -i "s|^GOST_USER=.*|GOST_USER=${gost_user}|" "${INSTALL_DIR}/configs/client.env"
+  sed -i "s|^GOST_PASSWORD=.*|GOST_PASSWORD=${gost_password}|" "${INSTALL_DIR}/configs/client.env"
 
   if [[ "${role}" == "client" || "${role}" == "both" ]]; then
     server_ip="$(prompt_required "Server public IP or domain")"
@@ -96,7 +133,7 @@ configure_project() {
     target_port="$(prompt_with_default "Target port" "3360")"
 
     sed -i "s|^LOCAL_FORWARD=.*|LOCAL_FORWARD=tcp://127.0.0.1:${local_port}/${target_host}:${target_port}|" "${INSTALL_DIR}/configs/client.env"
-    sed -i "s|^REMOTE_RELAY=.*|REMOTE_RELAY=relay+tls://${server_ip}:${server_port}|" "${INSTALL_DIR}/configs/client.env"
+    sed -i "s|^REMOTE_RELAY=.*|REMOTE_RELAY=relay+tls://${gost_user}:${gost_password}@${server_ip}:${server_port}|" "${INSTALL_DIR}/configs/client.env"
   fi
 }
 

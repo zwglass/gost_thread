@@ -51,7 +51,7 @@ gost -V
 The server service runs:
 
 ```bash
-gost -L=relay+tls://0.0.0.0:8443
+gost -L=relay+tls://gostuser:CHANGE_ME_PASSWORD@0.0.0.0:8443
 ```
 
 Configuration:
@@ -67,7 +67,7 @@ The client service runs:
 ```bash
 gost \
   -L=tcp://127.0.0.1:3333/pearl-ca1.luckypool.io:3360 \
-  -F=relay+tls://YOUR_SERVER_IP_OR_DOMAIN:8443
+  -F=relay+tls://gostuser:CHANGE_ME_PASSWORD@YOUR_SERVER_IP_OR_DOMAIN:8443
 ```
 
 Configuration:
@@ -104,11 +104,15 @@ The installer will:
 
 - install `gost` first if it is missing
 - create the project at `/opt/gost_thread`
+- ask for the GOST username and password
 - ask for the server IP or domain when installing the client
 - copy config files to `/etc/gost-thread/`
 - copy systemd services to `/etc/systemd/system/`
 - enable the selected service
 - start the selected service
+
+Use the same GOST username and password on the server and client.
+The username and password may contain only letters, numbers, dot, underscore, and hyphen.
 
 You can override the repository URL:
 
