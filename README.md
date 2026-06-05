@@ -114,6 +114,31 @@ sudo ./scripts/install_lpminer.sh
 The service requires `gost-client.service`, so install and start the client tunnel first.
 It waits for `127.0.0.1:3333` before starting the miner.
 
+View lpminer runtime output:
+
+```bash
+sudo journalctl -u lpminer -f
+```
+
+View recent lpminer logs:
+
+```bash
+sudo journalctl -u lpminer -n 100 --no-pager
+```
+
+View full lpminer service status and command:
+
+```bash
+systemctl status lpminer --no-pager -l
+```
+
+View current lpminer process and installed config:
+
+```bash
+ps -fp $(pidof lpminer)
+sudo cat /etc/gost-thread/lpminer.env
+```
+
 ## Install
 
 ### One-Line GitHub Install
@@ -260,6 +285,12 @@ Use journalctl:
 sudo journalctl -u gost-server -f
 sudo journalctl -u gost-client -f
 sudo journalctl -u lpminer -f
+```
+
+Recent lpminer logs:
+
+```bash
+sudo journalctl -u lpminer -n 100 --no-pager
 ```
 
 ## Uninstall
