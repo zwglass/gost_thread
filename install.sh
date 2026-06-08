@@ -5,6 +5,7 @@ REPO_URL="${GOST_THREAD_REPO:-https://github.com/zwglass/gost_thread}"
 BRANCH="${GOST_THREAD_BRANCH:-master}"
 INSTALL_DIR="${GOST_THREAD_INSTALL_DIR:-/opt/gost_thread}"
 TMP_DIR="$(mktemp -d)"
+PROMPT_VALUE=""
 
 cleanup() {
   rm -rf "${TMP_DIR}"
@@ -35,15 +36,6 @@ require_tty() {
   fi
 }
 
-tty_read() {
-  local prompt="$1"
-  local value
-
-  require_tty
-  read -r -p "${prompt}" value </dev/tty
-  echo "${value}"
-}
-
 prompt_with_default() {
   local prompt="$1"
   local default_value="$2"
@@ -51,12 +43,13 @@ prompt_with_default() {
   local value
 
   if [[ -n "${env_name}" && -n "${!env_name:-}" ]]; then
-    echo "${!env_name}"
+    PROMPT_VALUE="${!env_name}"
     return
   fi
 
-  value="$(tty_read "${prompt} [${default_value}]: ")"
-  echo "${value:-${default_value}}"
+  require_tty
+  read -r -p "${prompt} [${default_value}]: " value </dev/tty
+  PROMPT_VALUE="${value:-${default_value}}"
 }
 
 prompt_required() {
@@ -65,14 +58,15 @@ prompt_required() {
   local value
 
   if [[ -n "${env_name}" && -n "${!env_name:-}" ]]; then
-    echo "${!env_name}"
+    PROMPT_VALUE="${!env_name}"
     return
   fi
 
   while true; do
-    value="$(tty_read "${prompt}: ")"
+    require_tty
+    read -r -p "${prompt}: " value </dev/tty
     if [[ -n "${value}" ]]; then
-      echo "${value}"
+      PROMPT_VALUE="${value}"
       return
     fi
 
@@ -86,7 +80,7 @@ prompt_secret() {
   local value
 
   if [[ -n "${env_name}" && -n "${!env_name:-}" ]]; then
-    echo "${!env_name}"
+    PROMPT_VALUE="${!env_name}"
     return
   fi
 
@@ -96,7 +90,7 @@ prompt_secret() {
     echo >/dev/tty
 
     if [[ -n "${value}" ]]; then
-      echo "${value}"
+      PROMPT_VALUE="${value}"
       return
     fi
 
@@ -147,9 +141,12 @@ configure_project() {
   local gost_password
 
   gost_bin="$(command -v gost)"
-  server_port="$(prompt_with_default "Server relay port" "8443" "GOST_SERVER_PORT")"
-  gost_user="$(prompt_with_default "GOST username" "gostuser" "GOST_AUTH_USER")"
-  gost_password="$(prompt_secret "GOST password" "GOST_AUTH_PASSWORD")"
+  prompt_with_default "Server relay port" "8443" "GOST_SERVER_PORT"
+  server_port="${PROMPT_VALUE}"
+  prompt_with_default "GOST username" "gostuser" "GOST_AUTH_USER"
+  gost_user="${PROMPT_VALUE}"
+  prompt_secret "GOST password" "GOST_AUTH_PASSWORD"
+  gost_password="${PROMPT_VALUE}"
   validate_credential "GOST username" "${gost_user}"
   validate_credential "GOST password" "${gost_password}"
 
@@ -163,10 +160,14 @@ configure_project() {
   sed -i "s|^GOST_PASSWORD=.*|GOST_PASSWORD=${gost_password}|" "${INSTALL_DIR}/configs/client.env"
 
   if [[ "${role}" == "client" || "${role}" == "both" ]]; then
-    server_ip="$(prompt_required "Server public IP or domain" "GOST_SERVER_HOST")"
-    local_port="$(prompt_with_default "Local listen port" "3333" "GOST_LOCAL_PORT")"
-    target_host="$(prompt_with_default "Target host" "pearl-ca1.luckypool.io" "GOST_TARGET_HOST")"
-    target_port="$(prompt_with_default "Target port" "3360" "GOST_TARGET_PORT")"
+    prompt_required "Server public IP or domain" "GOST_SERVER_HOST"
+    server_ip="${PROMPT_VALUE}"
+    prompt_with_default "Local listen port" "3333" "GOST_LOCAL_PORT"
+    local_port="${PROMPT_VALUE}"
+    prompt_with_default "Target host" "pearl-ca1.luckypool.io" "GOST_TARGET_HOST"
+    target_host="${PROMPT_VALUE}"
+    prompt_with_default "Target port" "3360" "GOST_TARGET_PORT"
+    target_port="${PROMPT_VALUE}"
 
     sed -i "s|^LOCAL_FORWARD=.*|LOCAL_FORWARD=tcp://127.0.0.1:${local_port}/${target_host}:${target_port}|" "${INSTALL_DIR}/configs/client.env"
     sed -i "s|^REMOTE_RELAY=.*|REMOTE_RELAY=relay+tls://${gost_user}:${gost_password}@${server_ip}:${server_port}|" "${INSTALL_DIR}/configs/client.env"
