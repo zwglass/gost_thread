@@ -7,7 +7,7 @@ Requires=gost-client.service
 [Service]
 Type=simple
 EnvironmentFile=/etc/gost-thread/lpminer.env
-ExecStartPre=/bin/bash -c 'for i in {1..60}; do timeout 1 bash -c "</dev/tcp/127.0.0.1/3333" && exit 0; sleep 1; done; echo "127.0.0.1:3333 is not ready"; exit 1'
+ExecStartPre=/usr/local/lib/gost-thread/wait-for-lpminer-pool
 ExecStart=/bin/sh -c 'cd "${LPMINER_WORKDIR}" && exec "${LPMINER_BIN}" --algo "${LPMINER_ALGO}" --pool "${LPMINER_POOL}" --wallet "${LPMINER_WALLET}" --worker "${LPMINER_WORKER}"'
 Restart=always
 RestartSec=5

@@ -16,6 +16,7 @@ systemctl disable gost-server.service gost-client.service lpminer.service 2>/dev
 rm -f /etc/systemd/system/gost-server.service
 rm -f /etc/systemd/system/gost-client.service
 rm -f /etc/systemd/system/lpminer.service
+rm -f /usr/local/lib/gost-thread/wait-for-lpminer-pool
 rm -f /etc/gost-thread/server.env
 rm -f /etc/gost-thread/client.env
 rm -f /etc/gost-thread/lpminer.env
