@@ -298,3 +298,13 @@ sudo journalctl -u lpminer -n 100 --no-pager
 ```bash
 sudo ./scripts/uninstall.sh
 ```
+
+## Nvidia GPU Power Limit
+
+```bash
+sudo nvidia-smi -pl 250
+
+nvidia-smi -q -d POWER
+
+nvidia-smi -q -d POWER | grep -i "Power Limit"
+```
