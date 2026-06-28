@@ -1,5 +1,6 @@
 [Unit]
 Description=LP Miner
+Conflicts=akoya-miner.service
 After=network-online.target gost-client.service
 Wants=network-online.target
 Requires=gost-client.service

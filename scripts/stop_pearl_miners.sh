@@ -20,6 +20,7 @@ service_exists() {
 for service in "${MINER_SERVICES[@]}"; do
   if service_exists "${service}"; then
     run_systemctl stop "${service}" || true
+    run_systemctl disable "${service}" || true
   fi
 done
 

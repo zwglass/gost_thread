@@ -11,6 +11,7 @@ CLIENT_READY_ATTEMPTS="${GOST_THREAD_CLIENT_READY_ATTEMPTS:-10}"
 LOCAL_MINER_SERVICE="lpminer.service"
 AKOYA_SERVICE="akoya-miner.service"
 CLIENT_SERVICE="gost-client.service"
+CLIENT_READY_ENDPOINT=""
 
 if [[ "$#" -gt 1 ]]; then
   echo "Usage: $0 [profile]"
@@ -34,6 +35,22 @@ stop_if_installed() {
 
   if service_exists "${service}"; then
     run_systemctl stop "${service}" || true
+  fi
+}
+
+disable_if_installed() {
+  local service="$1"
+
+  if service_exists "${service}"; then
+    run_systemctl disable "${service}" || true
+  fi
+}
+
+enable_if_installed() {
+  local service="$1"
+
+  if service_exists "${service}"; then
+    run_systemctl enable "${service}"
   fi
 }
 
@@ -109,6 +126,27 @@ pool_is_ready() {
   return 1
 }
 
+endpoint_is_ready() {
+  local endpoint="$1"
+  local pool_host="${endpoint%:*}"
+  local pool_port="${endpoint##*:}"
+
+  if [[ -z "${pool_host}" || -z "${pool_port}" || "${pool_host}" == "${pool_port}" ]]; then
+    echo "Invalid client ready endpoint: ${endpoint:-not set}"
+    return 1
+  fi
+
+  for ((i = 1; i <= CLIENT_READY_ATTEMPTS; i++)); do
+    if tcp_probe "${pool_host}" "${pool_port}"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "${pool_host}:${pool_port} is not ready after ${CLIENT_READY_ATTEMPTS} attempts"
+  return 1
+}
+
 client_is_ready() {
   if ! service_exists "${CLIENT_SERVICE}"; then
     echo "${CLIENT_SERVICE} is not installed."
@@ -120,7 +158,11 @@ client_is_ready() {
     return 1
   fi
 
-  pool_is_ready "${MINER_FILE}"
+  if [[ -n "${CLIENT_READY_ENDPOINT}" ]]; then
+    endpoint_is_ready "${CLIENT_READY_ENDPOINT}"
+  else
+    pool_is_ready "${MINER_FILE}"
+  fi
 }
 
 restart_client() {
@@ -143,6 +185,7 @@ ensure_client_ready() {
 }
 
 selected_service="${LOCAL_MINER_SERVICE}"
+requires_gost=1
 
 if [[ "$#" -eq 1 ]]; then
   profile="$1"
@@ -163,20 +206,36 @@ if [[ "$#" -eq 1 ]]; then
   prefix="$(profile_prefix "${profile}")"
   selected_service="$(profile_value "${prefix}" MINER_SERVICE)"
   selected_service="${selected_service:-${LOCAL_MINER_SERVICE}}"
+  target_host="$(profile_value "${prefix}" TARGET_HOST)"
+  target_port="$(profile_value "${prefix}" TARGET_PORT)"
+  akoya_pool_host="$(profile_value "${prefix}" AKOYA_POOL_HOST)"
+  akoya_pool_port="$(profile_value "${prefix}" AKOYA_POOL_PORT)"
 
   if [[ "${selected_service}" == "${LOCAL_MINER_SERVICE}" ]]; then
     stop_if_installed "${AKOYA_SERVICE}"
+    disable_if_installed "${AKOYA_SERVICE}"
     run_switch_profile "${profile}"
   else
     stop_if_installed "${LOCAL_MINER_SERVICE}"
+    disable_if_installed "${LOCAL_MINER_SERVICE}"
+    if [[ -n "${target_host}" || -n "${target_port}" ]]; then
+      if [[ -n "${akoya_pool_host}" && -n "${akoya_pool_port}" ]]; then
+        CLIENT_READY_ENDPOINT="${akoya_pool_host}:${akoya_pool_port}"
+      fi
+      run_switch_profile "${profile}"
+    else
+      requires_gost=0
+    fi
   fi
 else
   stop_if_installed "${AKOYA_SERVICE}"
+  disable_if_installed "${AKOYA_SERVICE}"
 fi
 
-if [[ "${selected_service}" == "${LOCAL_MINER_SERVICE}" ]]; then
+if [[ "${requires_gost}" == "1" ]]; then
   ensure_client_ready
 fi
 
+enable_if_installed "${selected_service}"
 run_systemctl start "${selected_service}"
 run_systemctl status "${selected_service}" --no-pager

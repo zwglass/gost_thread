@@ -6,3 +6,5 @@ echo
 sudo systemctl status gost-client.service --no-pager || true
 echo
 sudo systemctl status lpminer.service --no-pager || true
+echo
+sudo systemctl status akoya-miner.service --no-pager || true

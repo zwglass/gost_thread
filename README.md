@@ -19,13 +19,13 @@ configs/
   profiles.env            # miner and pool profiles
 scripts/
   install_gost.sh         # install config and systemd services
-  install_lpminer.sh      # install lpminer systemd service
+  install_pearl_miners.sh # install Pearl miner binaries and systemd services
   start_server.sh
   start_client.sh
-  start_lpminer.sh
+  start_pearl_miners.sh
   stop_server.sh
   stop_client.sh
-  stop_lpminer.sh
+  stop_pearl_miners.sh
   status.sh
   uninstall.sh
 systemd/
@@ -106,56 +106,91 @@ configs/profiles.env
 Default expected binary:
 
 ```bash
-/root/programs/lpminer
+~/programs/pearl_miners/lpminer/lpminer
 ```
 
-Install lpminer as a systemd service on the client machine:
+Install Pearl miners on the client machine:
 
 ```bash
-sudo ./scripts/install_lpminer.sh
+sudo env LPMINER_DOWNLOAD_URL=YOUR_LPMINER_DOWNLOAD_URL \
+  AKOYA_POOL_WALLET=YOUR_PEARL_ADDRESS \
+  ./scripts/install_pearl_miners.sh
 ```
 
-The service requires `gost-client.service`, so install and start the client tunnel first.
-It waits for `127.0.0.1:3333` before starting the miner.
+The installer checks `lpminer`, `alpha-miner`, and `akoya-miner`. It installs
+local binaries under `~/programs/pearl_miners/` by default:
+
+```text
+~/programs/pearl_miners/lpminer/lpminer
+~/programs/pearl_miners/alpha_miner/alpha-miner
+```
+
+Akoya is installed by the official installer and keeps its official path and
+service layout. `LPMINER_DOWNLOAD_URL` is required when `lpminer` is not already
+installed because this repository does not ship a stable lpminer download URL.
+`ALPHA_MINER_DOWNLOAD_URL` defaults to
+`https://pearl.alphapool.tech/downloads/alpha-miner`.
+
+The installer stops and disables miner services after installation. Start the
+wanted profile with `start_pearl_miners.sh`; it enables the selected service,
+disables the other miner service, and systemd `Conflicts=` prevents both miners
+from staying active after boot.
 
 Switch the active pool and miner profile:
 
 ```bash
 sudo ./scripts/switch_profile.sh luckypool
 sudo ./scripts/switch_profile.sh alphapool
+sudo ./scripts/switch_profile.sh akoya
 ```
 
-Akoya is an independent miner service profile. Install it with Akoya's installer
-first, then use this project only to coordinate service start/stop:
+Akoya uses its own `akoya-miner.service`, but this project can still route it
+through GOST. You can install Akoya through `install_pearl_miners.sh`, or install
+it manually first and then start it through this project's profile wrapper:
 
 ```bash
 curl -sSL https://get.akoyapool.com/install.sh | sudo bash
-./scripts/start_lpminer.sh akoya
+./scripts/start_pearl_miners.sh akoya
+```
+
+The `akoya` profile sets the GOST client target to
+`pool-v2.akoyapool.com:443` and updates `/etc/akoya-miner/akoya-miner.env` so
+Akoya connects to the local tunnel:
+
+```env
+AKOYA_POOL_HOST=127.0.0.1
+AKOYA_POOL_PORT=3333
+AKOYA_POOL_TLS=1
+```
+
+The resulting path is:
+
+```text
+akoya-miner.service -> 127.0.0.1:3333 -> gost-client.service -> pool-v2.akoyapool.com:443
 ```
 
 The same profile argument can be passed when starting services:
 
 ```bash
 ./scripts/start_client.sh luckypool
-./scripts/start_lpminer.sh alphapool
-./scripts/start_lpminer.sh akoya
+./scripts/start_pearl_miners.sh alphapool
+./scripts/start_pearl_miners.sh akoya
 ```
 
 Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
 target pool endpoint, miner binary path, miner working directory, local miner
 pool, and full miner argument string. Profiles with `MINER_SERVICE`, such as
-`akoya`, are treated as independent services and are not run through
-`lpminer.service`.
+`akoya`, are treated as independent miner services and are not run through
+`lpminer.service`, but they can still use the same GOST client tunnel.
 
 Only one miner service is kept running. Starting `luckypool` or `alphapool`
 stops `akoya-miner.service`; starting `akoya` stops `lpminer.service`.
-`./scripts/stop_lpminer.sh` stops both services.
+`./scripts/stop_pearl_miners.sh` stops and disables both services.
 
-For profiles run through `lpminer.service`, `start_lpminer.sh` checks
-`gost-client.service` and the local `MINER_POOL` endpoint before starting the
-miner. If the client tunnel is inactive or the local pool port is not reachable,
-it runs `stop_client.sh` and `start_client.sh` once, then verifies the tunnel
-again. Independent service profiles such as `akoya` skip this GOST client check.
+For profiles that use GOST, `start_pearl_miners.sh` checks `gost-client.service` and
+the local pool endpoint before starting the miner. If the client tunnel is
+inactive or the local pool port is not reachable, it runs `stop_client.sh` and
+`start_client.sh` once, then verifies the tunnel again.
 
 View lpminer runtime output:
 
@@ -301,10 +336,10 @@ Client:
 LP Miner:
 
 ```bash
-./scripts/start_lpminer.sh
-./scripts/start_lpminer.sh luckypool
-./scripts/start_lpminer.sh alphapool
-./scripts/stop_lpminer.sh
+./scripts/start_pearl_miners.sh
+./scripts/start_pearl_miners.sh luckypool
+./scripts/start_pearl_miners.sh alphapool
+./scripts/stop_pearl_miners.sh
 ```
 
 Status:

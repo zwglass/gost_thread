@@ -27,6 +27,21 @@ quote_env_value() {
   printf "'%s'" "${value//\'/\'\\\'\'}"
 }
 
+upsert_env_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp_file
+
+  tmp_file="$(mktemp)"
+  if [[ -f "${file}" ]]; then
+    sed "/^${key}=/d" "${file}" >"${tmp_file}"
+  fi
+  echo "${key}=${value}" >>"${tmp_file}"
+  install -m 0600 "${tmp_file}" "${file}"
+  rm -f "${tmp_file}"
+}
+
 profile_value() {
   local key="${PROFILE_PREFIX}_$1"
 
@@ -75,6 +90,29 @@ restart_if_installed() {
   fi
 }
 
+write_akoya_env_if_configured() {
+  local env_file="$1"
+  local pool_host="$2"
+  local pool_port="$3"
+  local pool_tls="$4"
+
+  if [[ -z "${env_file}" && -z "${pool_host}" && -z "${pool_port}" && -z "${pool_tls}" ]]; then
+    return
+  fi
+
+  require_value ENV_FILE "${env_file}"
+
+  if [[ ! -f "${env_file}" ]]; then
+    echo "Missing Akoya env file: ${env_file}"
+    echo "Install Akoya first, or update ${PROFILE_PREFIX}_ENV_FILE in ${PROFILES_FILE}."
+    exit 1
+  fi
+
+  [[ -n "${pool_host}" ]] && upsert_env_value "${env_file}" AKOYA_POOL_HOST "${pool_host}"
+  [[ -n "${pool_port}" ]] && upsert_env_value "${env_file}" AKOYA_POOL_PORT "${pool_port}"
+  [[ -n "${pool_tls}" ]] && upsert_env_value "${env_file}" AKOYA_POOL_TLS "${pool_tls}"
+}
+
 require_root
 
 if [[ ! -f "${PROFILES_FILE}" ]]; then
@@ -105,22 +143,30 @@ PROFILE_PREFIX="$(printf "%s" "${PROFILE}" | tr "[:lower:]-" "[:upper:]_")"
 
 target_host="$(profile_value TARGET_HOST)"
 target_port="$(profile_value TARGET_PORT)"
+miner_service="$(profile_value MINER_SERVICE)"
 miner_bin="$(profile_value MINER_BIN)"
 miner_workdir="$(profile_value MINER_WORKDIR)"
 miner_pool="$(profile_value MINER_POOL)"
 miner_args="$(profile_value MINER_ARGS)"
+akoya_env_file="$(profile_value ENV_FILE)"
+akoya_pool_host="$(profile_value AKOYA_POOL_HOST)"
+akoya_pool_port="$(profile_value AKOYA_POOL_PORT)"
+akoya_pool_tls="$(profile_value AKOYA_POOL_TLS)"
 
 require_value TARGET_HOST "${target_host}"
 require_value TARGET_PORT "${target_port}"
-require_value MINER_BIN "${miner_bin}"
-require_value MINER_WORKDIR "${miner_workdir}"
-require_value MINER_POOL "${miner_pool}"
-require_value MINER_ARGS "${miner_args}"
 
-if [[ "${RESTART_SERVICES}" == "1" ]] && systemctl cat lpminer.service >/dev/null 2>&1 && [[ ! -x "${miner_bin}" ]]; then
-  echo "Miner binary is not installed or is not executable: ${miner_bin}"
-  echo "Update ${PROFILE_PREFIX}_MINER_BIN in ${PROFILES_FILE}, or install the miner first."
-  exit 1
+if [[ -z "${miner_service}" ]]; then
+  require_value MINER_BIN "${miner_bin}"
+  require_value MINER_WORKDIR "${miner_workdir}"
+  require_value MINER_POOL "${miner_pool}"
+  require_value MINER_ARGS "${miner_args}"
+
+  if [[ "${RESTART_SERVICES}" == "1" ]] && systemctl cat lpminer.service >/dev/null 2>&1 && [[ ! -x "${miner_bin}" ]]; then
+    echo "Miner binary is not installed or is not executable: ${miner_bin}"
+    echo "Update ${PROFILE_PREFIX}_MINER_BIN in ${PROFILES_FILE}, or install the miner first."
+    exit 1
+  fi
 fi
 
 gost_bin="$(read_env_value "${CLIENT_FILE}" GOST_BIN)"
@@ -153,11 +199,23 @@ trap 'rm -f "${client_tmp}" "${miner_tmp}"' EXIT
 } >"${miner_tmp}"
 
 install -m 0644 "${client_tmp}" "${CLIENT_FILE}"
-install -m 0644 "${miner_tmp}" "${MINER_FILE}"
+if [[ -z "${miner_service}" ]]; then
+  install -m 0644 "${miner_tmp}" "${MINER_FILE}"
+else
+  write_akoya_env_if_configured "${akoya_env_file}" "${akoya_pool_host}" "${akoya_pool_port}" "${akoya_pool_tls}"
+fi
 
 restart_if_installed gost-client.service
-restart_if_installed lpminer.service
+if [[ -n "${miner_service}" ]]; then
+  restart_if_installed "${miner_service}"
+else
+  restart_if_installed lpminer.service
+fi
 
 echo "Switched profile: ${PROFILE}"
 echo "GOST target: ${target_host}:${target_port}"
-echo "Miner binary: ${miner_bin}"
+if [[ -n "${miner_service}" ]]; then
+  echo "Miner service: ${miner_service}"
+else
+  echo "Miner binary: ${miner_bin}"
+fi
