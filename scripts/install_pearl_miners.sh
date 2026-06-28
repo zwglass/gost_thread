@@ -105,6 +105,32 @@ ensure_env_value_if_missing() {
   fi
 }
 
+download_file() {
+  local url="$1"
+  local output_file="$2"
+  local label="$3"
+  local attempt=1
+  local max_attempts=3
+
+  while ((attempt <= max_attempts)); do
+    echo "Downloading ${label} (${attempt}/${max_attempts}): ${url}"
+    if curl -fL --connect-timeout 20 "${url}" -o "${output_file}" && [[ -s "${output_file}" ]]; then
+      return 0
+    fi
+
+    rm -f "${output_file}"
+    if ((attempt < max_attempts)); then
+      echo "Download failed; retrying in 2 seconds..."
+      sleep 2
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  echo "Failed to download ${label}: ${url}"
+  echo "Check network connectivity, or override the URL with the ${label} download setting."
+  return 1
+}
+
 install_binary_miner() {
   local miner_name="$1"
   local miner_url="$2"
@@ -130,13 +156,21 @@ install_binary_miner() {
   echo "Installing ${miner_name} to ${miner_bin}"
   install -d -m 0755 "${miner_dir}"
   tmp_file="$(mktemp)"
-  curl -fL "${miner_url}" -o "${tmp_file}"
+  if ! download_file "${miner_url}" "${tmp_file}" "${url_var_name}"; then
+    rm -f "${tmp_file}"
+    exit 1
+  fi
 
   case "${miner_url}" in
     *.tar.gz | *.tgz)
       require_command tar
       tmp_dir="$(mktemp -d)"
-      tar -xzf "${tmp_file}" -C "${tmp_dir}"
+      if ! tar -xzf "${tmp_file}" -C "${tmp_dir}"; then
+        echo "Downloaded archive is not a valid gzip tar file: ${miner_url}"
+        rm -rf "${tmp_dir}"
+        rm -f "${tmp_file}"
+        exit 1
+      fi
       extracted_bin="$(
         find "${tmp_dir}" -type f \( -name "$(basename "${miner_bin}")" -o -name "${miner_name}" \) -print -quit
       )"
