@@ -111,8 +111,7 @@ Default expected binary:
 Install Pearl miners on the client machine:
 
 ```bash
-sudo env LPMINER_DOWNLOAD_URL=YOUR_LPMINER_DOWNLOAD_URL \
-  AKOYA_POOL_WALLET=YOUR_PEARL_ADDRESS \
+sudo env AKOYA_POOL_WALLET=YOUR_PEARL_ADDRESS \
   ./scripts/install_pearl_miners.sh
 ```
 
@@ -125,10 +124,9 @@ local binaries under `~/programs/pearl_miners/` by default:
 ```
 
 Akoya is installed by the official installer and keeps its official path and
-service layout. `LPMINER_DOWNLOAD_URL` is required when `lpminer` is not already
-installed because this repository does not ship a stable lpminer download URL.
-`ALPHA_MINER_DOWNLOAD_URL` defaults to
-`https://pearl.alphapool.tech/downloads/alpha-miner`.
+service layout. `LPMINER_DOWNLOAD_URL` and `ALPHA_MINER_DOWNLOAD_URL` are read
+from `configs/profiles.env` by default and can still be overridden with
+environment variables when needed.
 
 The installer stops and disables miner services after installation. Start the
 wanted profile with `start_pearl_miners.sh`; it enables the selected service,

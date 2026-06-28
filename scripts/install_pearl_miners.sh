@@ -10,7 +10,9 @@ PROFILES_CONFIG="${CONFIG_DIR}/profiles.env"
 AKOYA_ENV_FILE_FROM_ENV="${AKOYA_ENV_FILE:-}"
 AKOYA_ENV_FILE="${AKOYA_ENV_FILE_FROM_ENV:-/etc/akoya-miner/akoya-miner.env}"
 AKOYA_INSTALL_URL="${AKOYA_INSTALL_URL:-https://get.akoyapool.com/install.sh}"
-ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-https://pearl.alphapool.tech/downloads/alpha-miner}"
+DEFAULT_ALPHA_MINER_DOWNLOAD_URL="https://pearl.alphapool.tech/downloads/alpha-miner"
+DEFAULT_LPMINER_DOWNLOAD_URL="https://pearl.luckypool.io/lpminer/lpminer-0.1.9.tar.gz"
+ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-}"
 LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-}"
 
 detect_base_dir() {
@@ -93,6 +95,16 @@ replace_env_value_if_present() {
   fi
 }
 
+ensure_env_value_if_missing() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+
+  if ! grep -q "^${key}=" "${file}"; then
+    echo "${key}=${value}" >>"${file}"
+  fi
+}
+
 install_binary_miner() {
   local miner_name="$1"
   local miner_url="$2"
@@ -100,6 +112,8 @@ install_binary_miner() {
   local miner_bin="$4"
   local url_var_name="$5"
   local tmp_file
+  local tmp_dir
+  local extracted_bin
 
   if [[ -x "${miner_bin}" ]]; then
     echo "${miner_name} already installed: ${miner_bin}"
@@ -117,7 +131,29 @@ install_binary_miner() {
   install -d -m 0755 "${miner_dir}"
   tmp_file="$(mktemp)"
   curl -fL "${miner_url}" -o "${tmp_file}"
-  install -m 0755 "${tmp_file}" "${miner_bin}"
+
+  case "${miner_url}" in
+    *.tar.gz | *.tgz)
+      require_command tar
+      tmp_dir="$(mktemp -d)"
+      tar -xzf "${tmp_file}" -C "${tmp_dir}"
+      extracted_bin="$(
+        find "${tmp_dir}" -type f \( -name "$(basename "${miner_bin}")" -o -name "${miner_name}" \) -print -quit
+      )"
+      if [[ -z "${extracted_bin}" ]]; then
+        echo "Could not find ${miner_name} binary inside downloaded archive: ${miner_url}"
+        rm -rf "${tmp_dir}"
+        rm -f "${tmp_file}"
+        exit 1
+      fi
+      install -m 0755 "${extracted_bin}" "${miner_bin}"
+      rm -rf "${tmp_dir}"
+      ;;
+    *)
+      install -m 0755 "${tmp_file}" "${miner_bin}"
+      ;;
+  esac
+
   rm -f "${tmp_file}"
 }
 
@@ -191,6 +227,19 @@ install_default_configs() {
   replace_env_value_if_present "${PROFILES_CONFIG}" LUCKYPOOL_MINER_WORKDIR "${LPMINER_DIR}"
   replace_env_value_if_present "${PROFILES_CONFIG}" ALPHAPOOL_MINER_BIN "${ALPHA_MINER_BIN}"
   replace_env_value_if_present "${PROFILES_CONFIG}" ALPHAPOOL_MINER_WORKDIR "${ALPHA_MINER_DIR}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL "${DEFAULT_LPMINER_DOWNLOAD_URL}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL "${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}"
+}
+
+resolve_download_urls() {
+  local profile_lpminer_url
+  local profile_alpha_miner_url
+
+  profile_lpminer_url="$(read_env_value "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL)"
+  profile_alpha_miner_url="$(read_env_value "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL)"
+
+  LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-${profile_lpminer_url:-${DEFAULT_LPMINER_DOWNLOAD_URL}}}"
+  ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-${profile_alpha_miner_url:-${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}}}"
 }
 
 ensure_unit_conflict() {
@@ -292,6 +341,7 @@ install_services() {
 require_root
 require_command curl
 install_default_configs
+resolve_download_urls
 install_binary_miner lpminer "${LPMINER_DOWNLOAD_URL}" "${LPMINER_DIR}" "${LPMINER_BIN}" LPMINER_DOWNLOAD_URL
 install_binary_miner alpha-miner "${ALPHA_MINER_DOWNLOAD_URL}" "${ALPHA_MINER_DIR}" "${ALPHA_MINER_BIN}" ALPHA_MINER_DOWNLOAD_URL
 install_akoya_if_missing
