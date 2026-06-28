@@ -20,6 +20,8 @@ rm -f /usr/local/lib/gost-thread/wait-for-lpminer-pool
 rm -f /etc/gost-thread/server.env
 rm -f /etc/gost-thread/client.env
 rm -f /etc/gost-thread/lpminer.env
+rm -f /etc/gost-thread/miner.env
+rm -f /etc/gost-thread/profiles.env
 rmdir /etc/gost-thread 2>/dev/null || true
 
 systemctl daemon-reload

@@ -171,6 +171,11 @@ configure_project() {
 
     sed -i "s|^LOCAL_FORWARD=.*|LOCAL_FORWARD=tcp://127.0.0.1:${local_port}/${target_host}:${target_port}|" "${INSTALL_DIR}/configs/client.env"
     sed -i "s|^REMOTE_RELAY=.*|REMOTE_RELAY=relay+tls://${gost_user}:${gost_password}@${server_ip}:${server_port}|" "${INSTALL_DIR}/configs/client.env"
+    sed -i "s|^LOCAL_LISTEN=.*|LOCAL_LISTEN=tcp://127.0.0.1:${local_port}|" "${INSTALL_DIR}/configs/profiles.env"
+    sed -i "s|^LUCKYPOOL_TARGET_HOST=.*|LUCKYPOOL_TARGET_HOST=${target_host}|" "${INSTALL_DIR}/configs/profiles.env"
+    sed -i "s|^LUCKYPOOL_TARGET_PORT=.*|LUCKYPOOL_TARGET_PORT=${target_port}|" "${INSTALL_DIR}/configs/profiles.env"
+    sed -i "s|stratum+tcp://127.0.0.1:3333|stratum+tcp://127.0.0.1:${local_port}|g" "${INSTALL_DIR}/configs/profiles.env"
+    sed -i "s|stratum+tcp://127.0.0.1:3333|stratum+tcp://127.0.0.1:${local_port}|g" "${INSTALL_DIR}/configs/miner.env"
   fi
 }
 

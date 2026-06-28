@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_DIR="/etc/gost-thread"
 SYSTEMD_DIR="/etc/systemd/system"
 LIBEXEC_DIR="/usr/local/lib/gost-thread"
+MINER_CONFIG="${CONFIG_DIR}/miner.env"
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
@@ -21,23 +22,29 @@ read_env_value() {
 }
 
 check_lpminer_installed() {
-  local lpminer_bin
+  local miner_bin
+  local miner_config
 
-  lpminer_bin="$(read_env_value "${ROOT_DIR}/configs/lpminer.env" "LPMINER_BIN")"
+  miner_config="${MINER_CONFIG}"
+  if [[ ! -f "${miner_config}" ]]; then
+    miner_config="${ROOT_DIR}/configs/miner.env"
+  fi
 
-  if [[ -z "${lpminer_bin}" ]]; then
-    echo "LPMINER_BIN is required in configs/lpminer.env."
+  miner_bin="$(read_env_value "${miner_config}" "MINER_BIN")"
+
+  if [[ -z "${miner_bin}" ]]; then
+    echo "MINER_BIN is required in ${miner_config}."
     exit 1
   fi
 
-  if [[ ! -x "${lpminer_bin}" ]]; then
-    echo "lpminer is not installed or is not executable at: ${lpminer_bin}"
+  if [[ ! -x "${miner_bin}" ]]; then
+    echo "miner is not installed or is not executable at: ${miner_bin}"
     echo
-    echo "Update LPMINER_BIN and LPMINER_WORKDIR in:"
-    echo "  configs/lpminer.env"
+    echo "Update MINER_BIN and MINER_WORKDIR in:"
+    echo "  ${miner_config}"
     echo
     echo "Current expected binary:"
-    echo "  ${lpminer_bin}"
+    echo "  ${miner_bin}"
     exit 1
   fi
 }
@@ -46,6 +53,7 @@ check_client_tunnel() {
   local pool_address
   local pool_host
   local pool_port
+  local miner_config
 
   if ! systemctl cat gost-client.service >/dev/null 2>&1; then
     echo "gost-client.service is not installed."
@@ -63,13 +71,18 @@ check_client_tunnel() {
     exit 1
   fi
 
-  pool_address="$(read_env_value "${ROOT_DIR}/configs/lpminer.env" "LPMINER_POOL")"
+  miner_config="${MINER_CONFIG}"
+  if [[ ! -f "${miner_config}" ]]; then
+    miner_config="${ROOT_DIR}/configs/miner.env"
+  fi
+
+  pool_address="$(read_env_value "${miner_config}" "MINER_POOL")"
   pool_address="${pool_address#*://}"
   pool_host="${pool_address%:*}"
   pool_port="${pool_address##*:}"
 
   if [[ -z "${pool_host}" || -z "${pool_port}" || "${pool_host}" == "${pool_port}" ]]; then
-    echo "Invalid LPMINER_POOL in configs/lpminer.env: ${pool_address}"
+    echo "Invalid MINER_POOL in ${miner_config}: ${pool_address}"
     exit 1
   fi
 
@@ -89,7 +102,9 @@ check_client_tunnel
 
 install -d -m 0755 "${CONFIG_DIR}"
 install -d -m 0755 "${LIBEXEC_DIR}"
-install -m 0644 "${ROOT_DIR}/configs/lpminer.env" "${CONFIG_DIR}/lpminer.env"
+if [[ ! -f "${MINER_CONFIG}" ]]; then
+  install -m 0644 "${ROOT_DIR}/configs/miner.env" "${MINER_CONFIG}"
+fi
 install -m 0755 "${ROOT_DIR}/scripts/wait_for_lpminer_pool.sh" "${LIBEXEC_DIR}/wait-for-lpminer-pool"
 install -m 0644 "${ROOT_DIR}/systemd/lpminer.service" "${SYSTEMD_DIR}/lpminer.service"
 

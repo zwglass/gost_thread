@@ -6,9 +6,9 @@ Requires=gost-client.service
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/gost-thread/lpminer.env
+EnvironmentFile=/etc/gost-thread/miner.env
 ExecStartPre=/usr/local/lib/gost-thread/wait-for-lpminer-pool
-ExecStart=/bin/sh -c 'cd "${LPMINER_WORKDIR}" && exec "${LPMINER_BIN}" --algo "${LPMINER_ALGO}" --pool "${LPMINER_POOL}" --wallet "${LPMINER_WALLET}" --worker "${LPMINER_WORKER}"'
+ExecStart=/bin/sh -c 'cd "${MINER_WORKDIR}" && exec "${MINER_BIN}" ${MINER_ARGS}'
 Restart=always
 RestartSec=5
 LimitNOFILE=1048576

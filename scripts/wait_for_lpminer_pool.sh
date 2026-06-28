@@ -2,13 +2,13 @@
 set -euo pipefail
 
 attempts="${1:-60}"
-pool="${LPMINER_POOL:-}"
+pool="${MINER_POOL:-${LPMINER_POOL:-}}"
 pool_address="${pool#*://}"
 pool_host="${pool_address%:*}"
 pool_port="${pool_address##*:}"
 
 if [[ -z "${pool_host}" || -z "${pool_port}" || "${pool_host}" == "${pool_port}" ]]; then
-  echo "Invalid LPMINER_POOL: ${pool:-not set}"
+  echo "Invalid MINER_POOL: ${pool:-not set}"
   exit 1
 fi
 

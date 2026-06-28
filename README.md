@@ -15,7 +15,8 @@ The process is managed by systemd, so it can:
 configs/
   server.env              # server listen config
   client.env              # client forward config
-  lpminer.env             # lpminer config
+  miner.env               # active miner runtime config
+  profiles.env            # miner and pool profiles
 scripts/
   install_gost.sh         # install config and systemd services
   install_lpminer.sh      # install lpminer systemd service
@@ -83,7 +84,9 @@ configs/client.env
 
 ## LP Miner
 
-The lpminer service runs behind the local client tunnel:
+The `lpminer.service` unit runs the active miner behind the local client tunnel.
+The service name is kept for compatibility, but the miner binary and arguments
+come from `miner.env`.
 
 ```bash
 ./lpminer \
@@ -96,7 +99,8 @@ The lpminer service runs behind the local client tunnel:
 Configuration:
 
 ```bash
-configs/lpminer.env
+configs/miner.env
+configs/profiles.env
 ```
 
 Default expected binary:
@@ -113,6 +117,24 @@ sudo ./scripts/install_lpminer.sh
 
 The service requires `gost-client.service`, so install and start the client tunnel first.
 It waits for `127.0.0.1:3333` before starting the miner.
+
+Switch the active pool and miner profile:
+
+```bash
+sudo ./scripts/switch_profile.sh luckypool
+sudo ./scripts/switch_profile.sh alphapool
+```
+
+The same profile argument can be passed when starting services:
+
+```bash
+./scripts/start_client.sh luckypool
+./scripts/start_lpminer.sh alphapool
+```
+
+Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
+target pool endpoint, miner binary path, miner working directory, local miner
+pool, and full miner argument string.
 
 View lpminer runtime output:
 
@@ -136,7 +158,8 @@ View current lpminer process and installed config:
 
 ```bash
 ps -fp $(pidof lpminer)
-sudo cat /etc/gost-thread/lpminer.env
+sudo cat /etc/gost-thread/miner.env
+sudo cat /etc/gost-thread/profiles.env
 ```
 
 ## Install
@@ -199,6 +222,10 @@ GOST_TARGET_HOST      # default: pearl-ca1.luckypool.io
 GOST_TARGET_PORT      # default: 3360
 ```
 
+`GOST_TARGET_HOST` and `GOST_TARGET_PORT` initialize the default `luckypool`
+profile during one-line client installs. Additional profiles can be edited in
+`/etc/gost-thread/profiles.env`.
+
 You can override the repository URL:
 
 ```bash
@@ -245,6 +272,8 @@ Client:
 
 ```bash
 ./scripts/start_client.sh
+./scripts/start_client.sh luckypool
+./scripts/start_client.sh alphapool
 ./scripts/stop_client.sh
 ```
 
@@ -252,6 +281,8 @@ LP Miner:
 
 ```bash
 ./scripts/start_lpminer.sh
+./scripts/start_lpminer.sh luckypool
+./scripts/start_lpminer.sh alphapool
 ./scripts/stop_lpminer.sh
 ```
 

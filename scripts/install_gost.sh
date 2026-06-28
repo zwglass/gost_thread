@@ -96,6 +96,7 @@ check_gost_installed
 install -d -m 0755 "${CONFIG_DIR}"
 install -m 0644 "${ROOT_DIR}/configs/server.env" "${CONFIG_DIR}/server.env"
 install -m 0644 "${ROOT_DIR}/configs/client.env" "${CONFIG_DIR}/client.env"
+install -m 0644 "${ROOT_DIR}/configs/profiles.env" "${CONFIG_DIR}/profiles.env"
 install -m 0644 "${ROOT_DIR}/systemd/gost-server.service" "${SYSTEMD_DIR}/gost-server.service"
 install -m 0644 "${ROOT_DIR}/systemd/gost-client.service" "${SYSTEMD_DIR}/gost-client.service"
 
