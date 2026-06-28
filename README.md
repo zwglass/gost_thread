@@ -125,16 +125,37 @@ sudo ./scripts/switch_profile.sh luckypool
 sudo ./scripts/switch_profile.sh alphapool
 ```
 
+Akoya is an independent miner service profile. Install it with Akoya's installer
+first, then use this project only to coordinate service start/stop:
+
+```bash
+curl -sSL https://get.akoyapool.com/install.sh | sudo bash
+./scripts/start_lpminer.sh akoya
+```
+
 The same profile argument can be passed when starting services:
 
 ```bash
 ./scripts/start_client.sh luckypool
 ./scripts/start_lpminer.sh alphapool
+./scripts/start_lpminer.sh akoya
 ```
 
 Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
 target pool endpoint, miner binary path, miner working directory, local miner
-pool, and full miner argument string.
+pool, and full miner argument string. Profiles with `MINER_SERVICE`, such as
+`akoya`, are treated as independent services and are not run through
+`lpminer.service`.
+
+Only one miner service is kept running. Starting `luckypool` or `alphapool`
+stops `akoya-miner.service`; starting `akoya` stops `lpminer.service`.
+`./scripts/stop_lpminer.sh` stops both services.
+
+For profiles run through `lpminer.service`, `start_lpminer.sh` checks
+`gost-client.service` and the local `MINER_POOL` endpoint before starting the
+miner. If the client tunnel is inactive or the local pool port is not reachable,
+it runs `stop_client.sh` and `start_client.sh` once, then verifies the tunnel
+again. Independent service profiles such as `akoya` skip this GOST client check.
 
 View lpminer runtime output:
 
