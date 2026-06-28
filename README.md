@@ -31,7 +31,7 @@ scripts/
 systemd/
   gost-server.service
   gost-client.service
-  lpminer.service
+  pearl-miner.service
 logs/
 ```
 
@@ -82,11 +82,10 @@ Configuration:
 configs/client.env
 ```
 
-## LP Miner
+## Pearl Miner
 
-The `lpminer.service` unit runs the active miner behind the local client tunnel.
-The service name is kept for compatibility, but the miner binary and arguments
-come from `miner.env`.
+The `pearl-miner.service` unit runs the active local miner behind the local
+client tunnel. The miner binary and arguments come from `miner.env`.
 
 ```bash
 ./lpminer \
@@ -181,10 +180,10 @@ Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
 target pool endpoint, miner binary path, miner working directory, local miner
 pool, and full miner argument string. Profiles with `MINER_SERVICE`, such as
 `akoya`, are treated as independent miner services and are not run through
-`lpminer.service`, but they can still use the same GOST client tunnel.
+`pearl-miner.service`, but they can still use the same GOST client tunnel.
 
 Only one miner service is kept running. Starting `luckypool` or `alphapool`
-stops `akoya-miner.service`; starting `akoya` stops `lpminer.service`.
+stops `akoya-miner.service`; starting `akoya` stops `pearl-miner.service`.
 `./scripts/stop_pearl_miners.sh` stops and disables both services.
 
 For profiles that use GOST, `start_pearl_miners.sh` checks `gost-client.service` and
@@ -192,22 +191,22 @@ the local pool endpoint before starting the miner. If the client tunnel is
 inactive or the local pool port is not reachable, it runs `stop_client.sh` and
 `start_client.sh` once, then verifies the tunnel again.
 
-View lpminer runtime output:
+View Pearl miner runtime output:
 
 ```bash
-sudo journalctl -u lpminer -f
+sudo journalctl -u pearl-miner -f
 ```
 
-View recent lpminer logs:
+View recent Pearl miner logs:
 
 ```bash
-sudo journalctl -u lpminer -n 100 --no-pager
+sudo journalctl -u pearl-miner -n 100 --no-pager
 ```
 
-View full lpminer service status and command:
+View full Pearl miner service status and command:
 
 ```bash
-systemctl status lpminer --no-pager -l
+systemctl status pearl-miner --no-pager -l
 ```
 
 View current lpminer process and installed config:
@@ -333,7 +332,7 @@ Client:
 ./scripts/stop_client.sh
 ```
 
-LP Miner:
+Pearl Miners:
 
 ```bash
 ./scripts/start_pearl_miners.sh
@@ -359,9 +358,9 @@ sudo systemctl start gost-client
 sudo systemctl stop gost-client
 sudo systemctl status gost-client
 
-sudo systemctl start lpminer
-sudo systemctl stop lpminer
-sudo systemctl status lpminer
+sudo systemctl start pearl-miner
+sudo systemctl stop pearl-miner
+sudo systemctl status pearl-miner
 ```
 
 ## Logs
@@ -371,13 +370,13 @@ Use journalctl:
 ```bash
 sudo journalctl -u gost-server -f
 sudo journalctl -u gost-client -f
-sudo journalctl -u lpminer -f
+sudo journalctl -u pearl-miner -f
 ```
 
-Recent lpminer logs:
+Recent Pearl miner logs:
 
 ```bash
-sudo journalctl -u lpminer -n 100 --no-pager
+sudo journalctl -u pearl-miner -n 100 --no-pager
 ```
 
 ## Uninstall

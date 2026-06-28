@@ -10,14 +10,16 @@ require_root() {
 
 require_root
 
-systemctl stop gost-server.service gost-client.service lpminer.service akoya-miner.service 2>/dev/null || true
-systemctl disable gost-server.service gost-client.service lpminer.service 2>/dev/null || true
+systemctl stop gost-server.service gost-client.service pearl-miner.service lpminer.service akoya-miner.service 2>/dev/null || true
+systemctl disable gost-server.service gost-client.service pearl-miner.service lpminer.service 2>/dev/null || true
 
 rm -f /etc/systemd/system/gost-server.service
 rm -f /etc/systemd/system/gost-client.service
+rm -f /etc/systemd/system/pearl-miner.service
 rm -f /etc/systemd/system/lpminer.service
 rm -f /etc/systemd/system/akoya-miner.service.d/gost-thread.conf
 rmdir /etc/systemd/system/akoya-miner.service.d 2>/dev/null || true
+rm -f /usr/local/lib/gost-thread/wait-for-pearl-miner-pool
 rm -f /usr/local/lib/gost-thread/wait-for-lpminer-pool
 rm -f /etc/gost-thread/server.env
 rm -f /etc/gost-thread/client.env

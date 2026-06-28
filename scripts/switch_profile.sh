@@ -162,7 +162,7 @@ if [[ -z "${miner_service}" ]]; then
   require_value MINER_POOL "${miner_pool}"
   require_value MINER_ARGS "${miner_args}"
 
-  if [[ "${RESTART_SERVICES}" == "1" ]] && systemctl cat lpminer.service >/dev/null 2>&1 && [[ ! -x "${miner_bin}" ]]; then
+  if [[ "${RESTART_SERVICES}" == "1" ]] && systemctl cat pearl-miner.service >/dev/null 2>&1 && [[ ! -x "${miner_bin}" ]]; then
     echo "Miner binary is not installed or is not executable: ${miner_bin}"
     echo "Update ${PROFILE_PREFIX}_MINER_BIN in ${PROFILES_FILE}, or install the miner first."
     exit 1
@@ -209,7 +209,7 @@ restart_if_installed gost-client.service
 if [[ -n "${miner_service}" ]]; then
   restart_if_installed "${miner_service}"
 else
-  restart_if_installed lpminer.service
+  restart_if_installed pearl-miner.service
 fi
 
 echo "Switched profile: ${PROFILE}"

@@ -202,15 +202,15 @@ ensure_akoya_conflict() {
     exit 1
   fi
 
-  if service_has_conflict akoya-miner.service lpminer.service; then
-    echo "akoya-miner.service already conflicts with lpminer.service"
+  if service_has_conflict akoya-miner.service pearl-miner.service; then
+    echo "akoya-miner.service already conflicts with pearl-miner.service"
     return
   fi
 
   install -d -m 0755 "${dropin_dir}"
   {
     echo "[Unit]"
-    echo "Conflicts=lpminer.service"
+    echo "Conflicts=pearl-miner.service"
   } >"${dropin_file}"
   chmod 0644 "${dropin_file}"
 }
@@ -243,21 +243,21 @@ check_client_tunnel_if_installed() {
   if command -v timeout >/dev/null 2>&1; then
     timeout 1 bash -c "</dev/tcp/${pool_host}/${pool_port}" >/dev/null 2>&1 || {
       echo "The miner pool endpoint is not listening: ${pool_host}:${pool_port}"
-      echo "Install/start the GOST client before starting lpminer.service."
+      echo "Install/start the GOST client before starting pearl-miner.service."
     }
   fi
 }
 
 install_services() {
   install -d -m 0755 "${LIBEXEC_DIR}"
-  install -m 0755 "${ROOT_DIR}/scripts/wait_for_lpminer_pool.sh" "${LIBEXEC_DIR}/wait-for-lpminer-pool"
-  install -m 0644 "${ROOT_DIR}/systemd/lpminer.service" "${SYSTEMD_DIR}/lpminer.service"
-  ensure_unit_conflict "${SYSTEMD_DIR}/lpminer.service" akoya-miner.service
+  install -m 0755 "${ROOT_DIR}/scripts/wait_for_pearl_miner_pool.sh" "${LIBEXEC_DIR}/wait-for-pearl-miner-pool"
+  install -m 0644 "${ROOT_DIR}/systemd/pearl-miner.service" "${SYSTEMD_DIR}/pearl-miner.service"
+  ensure_unit_conflict "${SYSTEMD_DIR}/pearl-miner.service" akoya-miner.service
   ensure_akoya_conflict
 
   systemctl daemon-reload
-  systemctl stop lpminer.service akoya-miner.service 2>/dev/null || true
-  systemctl disable lpminer.service akoya-miner.service 2>/dev/null || true
+  systemctl stop pearl-miner.service lpminer.service akoya-miner.service 2>/dev/null || true
+  systemctl disable pearl-miner.service lpminer.service akoya-miner.service 2>/dev/null || true
 }
 
 require_root
