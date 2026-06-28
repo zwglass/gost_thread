@@ -7,7 +7,8 @@ SYSTEMD_DIR="${GOST_THREAD_SYSTEMD_DIR:-/etc/systemd/system}"
 LIBEXEC_DIR="${GOST_THREAD_LIBEXEC_DIR:-/usr/local/lib/gost-thread}"
 MINER_CONFIG="${CONFIG_DIR}/miner.env"
 PROFILES_CONFIG="${CONFIG_DIR}/profiles.env"
-AKOYA_ENV_FILE="${AKOYA_ENV_FILE:-/etc/akoya-miner/akoya-miner.env}"
+AKOYA_ENV_FILE_FROM_ENV="${AKOYA_ENV_FILE:-}"
+AKOYA_ENV_FILE="${AKOYA_ENV_FILE_FROM_ENV:-/etc/akoya-miner/akoya-miner.env}"
 AKOYA_INSTALL_URL="${AKOYA_INSTALL_URL:-https://get.akoyapool.com/install.sh}"
 ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-https://pearl.alphapool.tech/downloads/alpha-miner}"
 LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-}"
@@ -121,6 +122,12 @@ install_binary_miner() {
 }
 
 install_akoya_if_missing() {
+  local profile_env_file
+  local pool_wallet
+  local pool_host
+  local pool_port
+  local pool_tls
+
   if systemctl cat akoya-miner.service >/dev/null 2>&1; then
     echo "akoya-miner.service already installed"
     return
@@ -130,11 +137,33 @@ install_akoya_if_missing() {
     echo "akoya-miner binary exists but service is missing; rerunning official installer"
   fi
 
-  if [[ -z "${AKOYA_POOL_WALLET:-}" && ! -f "${AKOYA_ENV_FILE}" ]]; then
-    echo "AKOYA_POOL_WALLET is required for first-time Akoya installation."
-    echo "Example:"
-    echo "  sudo env AKOYA_POOL_WALLET=YOUR_PEARL_ADDRESS $0"
-    exit 1
+  if [[ -z "${AKOYA_ENV_FILE_FROM_ENV}" ]]; then
+    profile_env_file="$(read_env_value "${PROFILES_CONFIG}" "AKOYA_ENV_FILE")"
+    AKOYA_ENV_FILE="${profile_env_file:-${AKOYA_ENV_FILE}}"
+  fi
+  pool_wallet="${AKOYA_POOL_WALLET:-$(read_env_value "${PROFILES_CONFIG}" "AKOYA_POOL_WALLET")}"
+
+  if [[ ! -f "${AKOYA_ENV_FILE}" ]]; then
+    pool_host="$(read_env_value "${PROFILES_CONFIG}" "AKOYA_AKOYA_POOL_HOST")"
+    pool_port="$(read_env_value "${PROFILES_CONFIG}" "AKOYA_AKOYA_POOL_PORT")"
+    pool_tls="$(read_env_value "${PROFILES_CONFIG}" "AKOYA_AKOYA_POOL_TLS")"
+
+    if [[ -z "${pool_wallet}" || -z "${pool_host}" || -z "${pool_port}" ]]; then
+      echo "Akoya first-time env config is incomplete in ${PROFILES_CONFIG}."
+      echo "Set AKOYA_POOL_WALLET, AKOYA_AKOYA_POOL_HOST, and AKOYA_AKOYA_POOL_PORT."
+      exit 1
+    fi
+
+    echo "Creating ${AKOYA_ENV_FILE} from Akoya profile pool settings"
+    install -d -m 0755 "$(dirname "${AKOYA_ENV_FILE}")"
+    upsert_env_value "${AKOYA_ENV_FILE}" AKOYA_POOL_WALLET "${pool_wallet}"
+    upsert_env_value "${AKOYA_ENV_FILE}" AKOYA_POOL_HOST "${pool_host}"
+    upsert_env_value "${AKOYA_ENV_FILE}" AKOYA_POOL_PORT "${pool_port}"
+    [[ -n "${pool_tls}" ]] && upsert_env_value "${AKOYA_ENV_FILE}" AKOYA_POOL_TLS "${pool_tls}"
+  fi
+
+  if [[ -n "${pool_wallet}" ]]; then
+    export AKOYA_POOL_WALLET="${pool_wallet}"
   fi
 
   echo "Installing akoya-miner with the official installer"
@@ -262,10 +291,10 @@ install_services() {
 
 require_root
 require_command curl
+install_default_configs
 install_binary_miner lpminer "${LPMINER_DOWNLOAD_URL}" "${LPMINER_DIR}" "${LPMINER_BIN}" LPMINER_DOWNLOAD_URL
 install_binary_miner alpha-miner "${ALPHA_MINER_DOWNLOAD_URL}" "${ALPHA_MINER_DIR}" "${ALPHA_MINER_BIN}" ALPHA_MINER_DOWNLOAD_URL
 install_akoya_if_missing
-install_default_configs
 install_services
 check_client_tunnel_if_installed
 
