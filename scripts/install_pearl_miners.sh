@@ -100,7 +100,7 @@ ensure_env_value_if_missing() {
   local key="$2"
   local value="$3"
 
-  if ! grep -q "^${key}=" "${file}"; then
+  if ! grep -q "LPMINER_DOWNLOAD_URL^${key}=" "${file}"; then
     echo "${key}=${value}" >>"${file}"
   fi
 }

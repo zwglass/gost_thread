@@ -12,6 +12,7 @@ LOCAL_MINER_SERVICE="pearl-miner.service"
 AKOYA_SERVICE="akoya-miner.service"
 CLIENT_SERVICE="gost-client.service"
 CLIENT_READY_ENDPOINT=""
+CLIENT_CONFIG_UPDATED=0
 
 if [[ "$#" -gt 1 ]]; then
   echo "Usage: $0 [profile]"
@@ -69,6 +70,8 @@ run_switch_profile() {
   else
     GOST_THREAD_RESTART_SERVICES=0 "${ROOT_DIR}/scripts/switch_profile.sh" "${profile}"
   fi
+
+  CLIENT_CONFIG_UPDATED=1
 }
 
 profile_prefix() {
@@ -166,7 +169,7 @@ client_is_ready() {
 }
 
 restart_client() {
-  echo "Restarting ${CLIENT_SERVICE} before starting ${LOCAL_MINER_SERVICE}..."
+  echo "Restarting ${CLIENT_SERVICE} before starting miner service..."
   "${ROOT_DIR}/scripts/stop_client.sh" || true
   "${ROOT_DIR}/scripts/start_client.sh"
 }
@@ -233,6 +236,9 @@ else
 fi
 
 if [[ "${requires_gost}" == "1" ]]; then
+  if [[ "${CLIENT_CONFIG_UPDATED}" == "1" ]]; then
+    restart_client
+  fi
   ensure_client_ready
 fi
 
