@@ -3,7 +3,7 @@ set -euo pipefail
 
 SYSTEMCTL_BIN="${GOST_THREAD_SYSTEMCTL:-systemctl}"
 USE_SUDO="${GOST_THREAD_USE_SUDO:-1}"
-MINER_SERVICES=(pearl-miner.service akoya-miner.service)
+MINER_SERVICES=(pearl-miner.service)
 
 run_systemctl() {
   if [[ "${USE_SUDO}" == "1" ]]; then

@@ -7,13 +7,12 @@ SYSTEMD_DIR="${GOST_THREAD_SYSTEMD_DIR:-/etc/systemd/system}"
 LIBEXEC_DIR="${GOST_THREAD_LIBEXEC_DIR:-/usr/local/lib/gost-thread}"
 MINER_CONFIG="${CONFIG_DIR}/miner.env"
 PROFILES_CONFIG="${CONFIG_DIR}/profiles.env"
-AKOYA_ENV_FILE_FROM_ENV="${AKOYA_ENV_FILE:-}"
-AKOYA_ENV_FILE="${AKOYA_ENV_FILE_FROM_ENV:-/etc/akoya-miner/akoya-miner.env}"
-AKOYA_INSTALL_URL="${AKOYA_INSTALL_URL:-https://get.akoyapool.com/install.sh}"
 DEFAULT_ALPHA_MINER_DOWNLOAD_URL="https://pearl.alphapool.tech/downloads/alpha-miner"
 DEFAULT_LPMINER_DOWNLOAD_URL="https://pearl.luckypool.io/lpminer/lpminer-0.1.9.tar.gz"
+DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL="https://pearlhash.xyz/downloads/pearl-miner-v12"
 ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-}"
 LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-}"
+PEARLHASH_MINER_DOWNLOAD_URL="${PEARLHASH_MINER_DOWNLOAD_URL:-}"
 
 detect_base_dir() {
   if [[ -n "${PEARL_MINERS_DIR:-}" ]]; then
@@ -36,6 +35,8 @@ LPMINER_DIR="${LPMINER_DIR:-${MINERS_BASE_DIR}/lpminer}"
 LPMINER_BIN="${LPMINER_BIN:-${LPMINER_DIR}/lpminer}"
 ALPHA_MINER_DIR="${ALPHA_MINER_DIR:-${MINERS_BASE_DIR}/alpha_miner}"
 ALPHA_MINER_BIN="${ALPHA_MINER_BIN:-${ALPHA_MINER_DIR}/alpha-miner}"
+PEARLHASH_MINER_DIR="${PEARLHASH_MINER_DIR:-${MINERS_BASE_DIR}/pearlhash}"
+PEARLHASH_MINER_BIN="${PEARLHASH_MINER_BIN:-${PEARLHASH_MINER_DIR}/pearl-miner}"
 
 require_root() {
   if [[ "${EUID}" -ne 0 && "${CONFIG_DIR}" == "/etc/gost-thread" ]]; then
@@ -58,21 +59,6 @@ read_env_value() {
   local key="$2"
 
   sed -n "s/^${key}=//p" "${file}" | tail -n 1
-}
-
-upsert_env_value() {
-  local file="$1"
-  local key="$2"
-  local value="$3"
-  local tmp_file
-
-  tmp_file="$(mktemp)"
-  if [[ -f "${file}" ]]; then
-    sed "/^${key}=/d" "${file}" >"${tmp_file}"
-  fi
-  echo "${key}=${value}" >>"${tmp_file}"
-  install -m 0644 "${tmp_file}" "${file}"
-  rm -f "${tmp_file}"
 }
 
 replace_env_value_if_present() {
@@ -100,7 +86,7 @@ ensure_env_value_if_missing() {
   local key="$2"
   local value="$3"
 
-  if ! grep -q "LPMINER_DOWNLOAD_URL^${key}=" "${file}"; then
+  if ! grep -q "^${key}=" "${file}"; then
     echo "${key}=${value}" >>"${file}"
   fi
 }
@@ -191,59 +177,6 @@ install_binary_miner() {
   rm -f "${tmp_file}"
 }
 
-install_akoya_if_missing() {
-  local profile_env_file
-  local pool_wallet
-  local pool_host
-  local pool_port
-  local pool_tls
-
-  if systemctl cat akoya-miner.service >/dev/null 2>&1; then
-    echo "akoya-miner.service already installed"
-    return
-  fi
-
-  if [[ -x /opt/akoya-miner/akoya-miner || -x /usr/local/bin/akoya-miner ]]; then
-    echo "akoya-miner binary exists but service is missing; rerunning official installer"
-  fi
-
-  if [[ -z "${AKOYA_ENV_FILE_FROM_ENV}" ]]; then
-    profile_env_file="$(read_env_value "${PROFILES_CONFIG}" "AKOYA_ENV_FILE")"
-    AKOYA_ENV_FILE="${profile_env_file:-${AKOYA_ENV_FILE}}"
-  fi
-  pool_wallet="${AKOYA_POOL_WALLET:-$(read_env_value "${PROFILES_CONFIG}" "AKOYA_POOL_WALLET")}"
-
-  if [[ ! -f "${AKOYA_ENV_FILE}" ]]; then
-    pool_host="$(read_env_value "${PROFILES_CONFIG}" "AKOYA_AKOYA_POOL_HOST")"
-    pool_port="$(read_env_value "${PROFILES_CONFIG}" "AKOYA_AKOYA_POOL_PORT")"
-    pool_tls="$(read_env_value "${PROFILES_CONFIG}" "AKOYA_AKOYA_POOL_TLS")"
-
-    if [[ -z "${pool_wallet}" || -z "${pool_host}" || -z "${pool_port}" ]]; then
-      echo "Akoya first-time env config is incomplete in ${PROFILES_CONFIG}."
-      echo "Set AKOYA_POOL_WALLET, AKOYA_AKOYA_POOL_HOST, and AKOYA_AKOYA_POOL_PORT."
-      exit 1
-    fi
-
-    echo "Creating ${AKOYA_ENV_FILE} from Akoya profile pool settings"
-    install -d -m 0755 "$(dirname "${AKOYA_ENV_FILE}")"
-    upsert_env_value "${AKOYA_ENV_FILE}" AKOYA_POOL_WALLET "${pool_wallet}"
-    upsert_env_value "${AKOYA_ENV_FILE}" AKOYA_POOL_HOST "${pool_host}"
-    upsert_env_value "${AKOYA_ENV_FILE}" AKOYA_POOL_PORT "${pool_port}"
-    [[ -n "${pool_tls}" ]] && upsert_env_value "${AKOYA_ENV_FILE}" AKOYA_POOL_TLS "${pool_tls}"
-  fi
-
-  if [[ -n "${pool_wallet}" ]]; then
-    export AKOYA_POOL_WALLET="${pool_wallet}"
-  fi
-
-  echo "Installing akoya-miner with the official installer"
-  local installer
-  installer="$(mktemp)"
-  curl -fsSL "${AKOYA_INSTALL_URL}" -o "${installer}"
-  bash "${installer}"
-  rm -f "${installer}"
-}
-
 install_default_configs() {
   install -d -m 0755 "${CONFIG_DIR}"
 
@@ -261,70 +194,25 @@ install_default_configs() {
   replace_env_value_if_present "${PROFILES_CONFIG}" LUCKYPOOL_MINER_WORKDIR "${LPMINER_DIR}"
   replace_env_value_if_present "${PROFILES_CONFIG}" ALPHAPOOL_MINER_BIN "${ALPHA_MINER_BIN}"
   replace_env_value_if_present "${PROFILES_CONFIG}" ALPHAPOOL_MINER_WORKDIR "${ALPHA_MINER_DIR}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" PEARLHASH_MINER_BIN "${PEARLHASH_MINER_BIN}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" PEARLHASH_MINER_WORKDIR "${PEARLHASH_MINER_DIR}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL "${DEFAULT_LPMINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL "${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL "${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}"
 }
 
 resolve_download_urls() {
   local profile_lpminer_url
   local profile_alpha_miner_url
+  local profile_pearlhash_miner_url
 
   profile_lpminer_url="$(read_env_value "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL)"
   profile_alpha_miner_url="$(read_env_value "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL)"
+  profile_pearlhash_miner_url="$(read_env_value "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL)"
 
   LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-${profile_lpminer_url:-${DEFAULT_LPMINER_DOWNLOAD_URL}}}"
   ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-${profile_alpha_miner_url:-${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}}}"
-}
-
-ensure_unit_conflict() {
-  local unit_file="$1"
-  local conflict_service="$2"
-  local tmp_file
-
-  if sed -n 's/^Conflicts=//p' "${unit_file}" | tr ' ' '\n' | grep -Fxq "${conflict_service}"; then
-    return
-  fi
-
-  tmp_file="$(mktemp)"
-  awk -v conflict="Conflicts=${conflict_service}" '
-    /^\[Unit\]$/ {
-      print
-      print conflict
-      next
-    }
-    { print }
-  ' "${unit_file}" >"${tmp_file}"
-  install -m 0644 "${tmp_file}" "${unit_file}"
-  rm -f "${tmp_file}"
-}
-
-service_has_conflict() {
-  local service="$1"
-  local conflict_service="$2"
-
-  systemctl cat "${service}" 2>/dev/null | sed -n 's/^Conflicts=//p' | tr ' ' '\n' | grep -Fxq "${conflict_service}"
-}
-
-ensure_akoya_conflict() {
-  local dropin_dir="${SYSTEMD_DIR}/akoya-miner.service.d"
-  local dropin_file="${dropin_dir}/gost-thread.conf"
-
-  if ! systemctl cat akoya-miner.service >/dev/null 2>&1; then
-    echo "akoya-miner.service is not installed; cannot add Conflicts drop-in."
-    exit 1
-  fi
-
-  if service_has_conflict akoya-miner.service pearl-miner.service; then
-    echo "akoya-miner.service already conflicts with pearl-miner.service"
-    return
-  fi
-
-  install -d -m 0755 "${dropin_dir}"
-  {
-    echo "[Unit]"
-    echo "Conflicts=pearl-miner.service"
-  } >"${dropin_file}"
-  chmod 0644 "${dropin_file}"
+  PEARLHASH_MINER_DOWNLOAD_URL="${PEARLHASH_MINER_DOWNLOAD_URL:-${profile_pearlhash_miner_url:-${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}}}"
 }
 
 check_client_tunnel_if_installed() {
@@ -364,12 +252,10 @@ install_services() {
   install -d -m 0755 "${LIBEXEC_DIR}"
   install -m 0755 "${ROOT_DIR}/scripts/wait_for_pearl_miner_pool.sh" "${LIBEXEC_DIR}/wait-for-pearl-miner-pool"
   install -m 0644 "${ROOT_DIR}/systemd/pearl-miner.service" "${SYSTEMD_DIR}/pearl-miner.service"
-  ensure_unit_conflict "${SYSTEMD_DIR}/pearl-miner.service" akoya-miner.service
-  ensure_akoya_conflict
 
   systemctl daemon-reload
-  systemctl stop pearl-miner.service lpminer.service akoya-miner.service 2>/dev/null || true
-  systemctl disable pearl-miner.service lpminer.service akoya-miner.service 2>/dev/null || true
+  systemctl stop pearl-miner.service lpminer.service 2>/dev/null || true
+  systemctl disable pearl-miner.service lpminer.service 2>/dev/null || true
 }
 
 require_root
@@ -378,7 +264,7 @@ install_default_configs
 resolve_download_urls
 install_binary_miner lpminer "${LPMINER_DOWNLOAD_URL}" "${LPMINER_DIR}" "${LPMINER_BIN}" LPMINER_DOWNLOAD_URL
 install_binary_miner alpha-miner "${ALPHA_MINER_DOWNLOAD_URL}" "${ALPHA_MINER_DIR}" "${ALPHA_MINER_BIN}" ALPHA_MINER_DOWNLOAD_URL
-install_akoya_if_missing
+install_binary_miner pearlhash-miner "${PEARLHASH_MINER_DOWNLOAD_URL}" "${PEARLHASH_MINER_DIR}" "${PEARLHASH_MINER_BIN}" PEARLHASH_MINER_DOWNLOAD_URL
 install_services
 check_client_tunnel_if_installed
 
@@ -387,9 +273,9 @@ echo
 echo "Miner paths:"
 echo "  lpminer:      ${LPMINER_BIN}"
 echo "  alpha-miner:  ${ALPHA_MINER_BIN}"
-echo "  akoya-miner:  official installer path"
+echo "  pearlhash:    ${PEARLHASH_MINER_BIN}"
 echo
 echo "Start a profile:"
 echo "  sudo ./scripts/start_pearl_miners.sh luckypool"
 echo "  sudo ./scripts/start_pearl_miners.sh alphapool"
-echo "  sudo ./scripts/start_pearl_miners.sh akoya"
+echo "  sudo ./scripts/start_pearl_miners.sh pearlhash"

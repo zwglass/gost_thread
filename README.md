@@ -111,59 +111,54 @@ Default expected binary:
 Install Pearl miners on the client machine:
 
 ```bash
-sudo env AKOYA_POOL_WALLET=YOUR_PEARL_ADDRESS \
-  ./scripts/install_pearl_miners.sh
+sudo ./scripts/install_pearl_miners.sh
 ```
 
-The installer checks `lpminer`, `alpha-miner`, and `akoya-miner`. It installs
-local binaries under `~/programs/pearl_miners/` by default:
+The installer checks `lpminer`, `alpha-miner`, Pearlhash's official
+`pearl-miner`. It installs local binaries under `~/programs/pearl_miners/` by
+default:
 
 ```text
 ~/programs/pearl_miners/lpminer/lpminer
 ~/programs/pearl_miners/alpha_miner/alpha-miner
+~/programs/pearl_miners/pearlhash/pearl-miner
 ```
 
-Akoya is installed by the official installer and keeps its official path and
-service layout. `LPMINER_DOWNLOAD_URL` and `ALPHA_MINER_DOWNLOAD_URL` are read
-from `configs/profiles.env` by default and can still be overridden with
-environment variables when needed.
+`LPMINER_DOWNLOAD_URL`, `ALPHA_MINER_DOWNLOAD_URL`, and
+`PEARLHASH_MINER_DOWNLOAD_URL` are read from `configs/profiles.env` by default.
+They can still be overridden with environment variables when needed.
 
 The installer stops and disables miner services after installation. Start the
-wanted profile with `start_pearl_miners.sh`; it enables the selected service,
-disables the other miner service, and systemd `Conflicts=` prevents both miners
-from staying active after boot.
+wanted profile with `start_pearl_miners.sh`; it enables `pearl-miner.service`.
 
 Switch the active pool and miner profile:
 
 ```bash
 sudo ./scripts/switch_profile.sh luckypool
 sudo ./scripts/switch_profile.sh alphapool
-sudo ./scripts/switch_profile.sh akoya
+sudo ./scripts/switch_profile.sh pearlhash
 ```
 
-Akoya uses its own `akoya-miner.service`, but this project can still route it
-through GOST. You can install Akoya through `install_pearl_miners.sh`, or install
-it manually first and then start it through this project's profile wrapper:
+The `pearlhash` profile follows the command shape from
+https://pearlhash.xyz/#start-mining. The official page currently offers:
 
 ```bash
-curl -sSL https://get.akoyapool.com/install.sh | sudo bash
-./scripts/start_pearl_miners.sh akoya
+curl https://pearlhash.xyz/downloads/pearl-miner-v12 -o pearl-miner && chmod +x pearl-miner
+./pearl-miner --host pool.pearlhash.xyz:9000 --user <address>
 ```
 
-The `akoya` profile sets the GOST client target to
-`pool-v2.akoyapool.com:443` and updates `/etc/akoya-miner/akoya-miner.env` so
-Akoya connects to the local tunnel:
+In this project the miner still connects to the local GOST tunnel:
 
-```env
-AKOYA_POOL_HOST=127.0.0.1
-AKOYA_POOL_PORT=3333
-AKOYA_POOL_TLS=1
+```bash
+${PEARL_MINERS_DIR}/pearlhash/pearl-miner \
+  --host 127.0.0.1:3333 \
+  --user prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma.rtx3090
 ```
 
 The resulting path is:
 
 ```text
-akoya-miner.service -> 127.0.0.1:3333 -> gost-client.service -> pool-v2.akoyapool.com:443
+pearl-miner -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:9000
 ```
 
 The same profile argument can be passed when starting services:
@@ -171,18 +166,14 @@ The same profile argument can be passed when starting services:
 ```bash
 ./scripts/start_client.sh luckypool
 ./scripts/start_pearl_miners.sh alphapool
-./scripts/start_pearl_miners.sh akoya
+./scripts/start_pearl_miners.sh pearlhash
 ```
 
 Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
 target pool endpoint, miner binary path, miner working directory, local miner
-pool, and full miner argument string. Profiles with `MINER_SERVICE`, such as
-`akoya`, are treated as independent miner services and are not run through
-`pearl-miner.service`, but they can still use the same GOST client tunnel.
-
-Only one miner service is kept running. Starting `luckypool` or `alphapool`
-stops `akoya-miner.service`; starting `akoya` stops `pearl-miner.service`.
-`./scripts/stop_pearl_miners.sh` stops and disables both services.
+pool, and full miner argument string. All supported profiles run through
+`pearl-miner.service`. `./scripts/stop_pearl_miners.sh` stops and disables that
+service.
 
 For profiles that use GOST, `start_pearl_miners.sh` checks `gost-client.service` and
 the local pool endpoint before starting the miner. If the client tunnel is
@@ -207,10 +198,12 @@ View full Pearl miner service status and command:
 systemctl status pearl-miner --no-pager -l
 ```
 
-View current lpminer process and installed config:
+View current miner process and installed config:
 
 ```bash
 ps -fp $(pidof lpminer)
+ps -fp $(pidof alpha-miner)
+ps -fp $(pidof pearl-miner)
 sudo cat /etc/gost-thread/miner.env
 sudo cat /etc/gost-thread/profiles.env
 ```
@@ -327,6 +320,7 @@ Client:
 ./scripts/start_client.sh
 ./scripts/start_client.sh luckypool
 ./scripts/start_client.sh alphapool
+./scripts/start_client.sh pearlhash
 ./scripts/stop_client.sh
 ```
 
@@ -336,6 +330,7 @@ Pearl Miners:
 ./scripts/start_pearl_miners.sh
 ./scripts/start_pearl_miners.sh luckypool
 ./scripts/start_pearl_miners.sh alphapool
+./scripts/start_pearl_miners.sh pearlhash
 ./scripts/stop_pearl_miners.sh
 ```
 
