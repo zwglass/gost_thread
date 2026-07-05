@@ -115,18 +115,18 @@ sudo ./scripts/install_pearl_miners.sh
 ```
 
 The installer checks `lpminer`, `alpha-miner`, Pearlhash's official
-`pearl-miner`, and Pearl Fortune's AMD miner. It installs local binaries under
+`pearl-miner`, and Pearl Fortune's CUDA miner. It installs local binaries under
 `~/programs/pearl_miners/` by default:
 
 ```text
 ~/programs/pearl_miners/lpminer/lpminer
 ~/programs/pearl_miners/alpha_miner/alpha-miner
 ~/programs/pearl_miners/pearlhash/pearl-miner
-~/programs/pearl_miners/pearlfortune_amd/miner
+~/programs/pearl_miners/pearlfortune/miner-cuda13
 ```
 
 `LPMINER_DOWNLOAD_URL`, `ALPHA_MINER_DOWNLOAD_URL`,
-`PEARLHASH_MINER_DOWNLOAD_URL`, and `PEARLFORTUNE_AMD_DOWNLOAD_URL` are read from
+`PEARLHASH_MINER_DOWNLOAD_URL`, and `PEARLFORTUNE_DOWNLOAD_URL` are read from
 `configs/profiles.env` by default. They can still be overridden with environment
 variables when needed.
 
@@ -164,13 +164,13 @@ The resulting path is:
 pearl-miner -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:9000
 ```
 
-The `pearlfortune` profile follows the AMD command shape from
-https://github.com/pearlfortune/pearl-miner. The verified downloadable AMD
-release asset is `pearlfortune-amd-v1.2.2.fix.tar.gz`; keep the extracted
-`lib/` directory and start the miner as:
+The `pearlfortune` profile follows the CUDA command shape from
+https://github.com/pearlfortune/pearl-miner. The downloadable release asset is
+`pearlfortune-v1.2.3.tar.gz`; the extracted folder is `pearlfortune`, and the
+default binary is `miner-cuda13`:
 
 ```bash
-LD_LIBRARY_PATH=./lib:$LD_LIBRARY_PATH ./miner \
+./miner-cuda13 \
   --proxy global.pearlfortune.org:443 \
   --address {prl-address} \
   --worker $(hostname) \
@@ -180,20 +180,17 @@ LD_LIBRARY_PATH=./lib:$LD_LIBRARY_PATH ./miner \
 In this project the miner still connects to the local GOST tunnel:
 
 ```bash
-${PEARL_MINERS_DIR}/pearlfortune_amd/miner \
+${PEARL_MINERS_DIR}/pearlfortune/miner-cuda13 \
   --proxy 127.0.0.1:3333 \
   --address prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma \
   --worker rtx3090 \
   -gpu
 ```
 
-The service exports `MINER_LD_LIBRARY_PATH` for this profile so the AMD miner
-can load `${PEARL_MINERS_DIR}/pearlfortune_amd/lib`.
-
 The resulting path is:
 
 ```text
-miner -> 127.0.0.1:3333 -> gost-client.service -> global.pearlfortune.org:443
+miner-cuda13 -> 127.0.0.1:3333 -> gost-client.service -> global.pearlfortune.org:443
 ```
 
 The same profile argument can be passed when starting services:
