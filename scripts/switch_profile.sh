@@ -109,6 +109,7 @@ miner_service="$(profile_value MINER_SERVICE)"
 miner_bin="$(profile_value MINER_BIN)"
 miner_workdir="$(profile_value MINER_WORKDIR)"
 miner_pool="$(profile_value MINER_POOL)"
+miner_ld_library_path="$(profile_value MINER_LD_LIBRARY_PATH)"
 miner_args="$(profile_value MINER_ARGS)"
 
 if [[ -n "${miner_service}" ]]; then
@@ -156,6 +157,7 @@ trap 'rm -f "${client_tmp}" "${miner_tmp}"' EXIT
   echo "MINER_BIN=${miner_bin}"
   echo "MINER_WORKDIR=${miner_workdir}"
   echo "MINER_POOL=${miner_pool}"
+  echo "MINER_LD_LIBRARY_PATH=${miner_ld_library_path}"
   echo "MINER_ARGS=$(quote_env_value "${miner_args}")"
 } >"${miner_tmp}"
 

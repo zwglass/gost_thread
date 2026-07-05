@@ -10,9 +10,11 @@ PROFILES_CONFIG="${CONFIG_DIR}/profiles.env"
 DEFAULT_ALPHA_MINER_DOWNLOAD_URL="https://pearl.alphapool.tech/downloads/alpha-miner"
 DEFAULT_LPMINER_DOWNLOAD_URL="https://pearl.luckypool.io/lpminer/lpminer-0.1.9.tar.gz"
 DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL="https://pearlhash.xyz/downloads/pearl-miner-v12"
+DEFAULT_PEARLFORTUNE_AMD_DOWNLOAD_URL="https://github.com/pearlfortune/pearl-miner/releases/download/v1.2.2/pearlfortune-amd-v1.2.2.fix.tar.gz"
 ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-}"
 LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-}"
 PEARLHASH_MINER_DOWNLOAD_URL="${PEARLHASH_MINER_DOWNLOAD_URL:-}"
+PEARLFORTUNE_AMD_DOWNLOAD_URL="${PEARLFORTUNE_AMD_DOWNLOAD_URL:-}"
 
 detect_base_dir() {
   if [[ -n "${PEARL_MINERS_DIR:-}" ]]; then
@@ -37,6 +39,8 @@ ALPHA_MINER_DIR="${ALPHA_MINER_DIR:-${MINERS_BASE_DIR}/alpha_miner}"
 ALPHA_MINER_BIN="${ALPHA_MINER_BIN:-${ALPHA_MINER_DIR}/alpha-miner}"
 PEARLHASH_MINER_DIR="${PEARLHASH_MINER_DIR:-${MINERS_BASE_DIR}/pearlhash}"
 PEARLHASH_MINER_BIN="${PEARLHASH_MINER_BIN:-${PEARLHASH_MINER_DIR}/pearl-miner}"
+PEARLFORTUNE_AMD_DIR="${PEARLFORTUNE_AMD_DIR:-${MINERS_BASE_DIR}/pearlfortune_amd}"
+PEARLFORTUNE_AMD_BIN="${PEARLFORTUNE_AMD_BIN:-${PEARLFORTUNE_AMD_DIR}/miner}"
 
 require_root() {
   if [[ "${EUID}" -ne 0 && "${CONFIG_DIR}" == "/etc/gost-thread" ]]; then
@@ -177,7 +181,66 @@ install_binary_miner() {
   rm -f "${tmp_file}"
 }
 
+install_archive_dir_miner() {
+  local miner_name="$1"
+  local miner_url="$2"
+  local miner_dir="$3"
+  local miner_bin="$4"
+  local url_var_name="$5"
+  local tmp_file
+  local tmp_dir
+  local extracted_bin
+  local extracted_dir
+
+  if [[ -x "${miner_bin}" ]]; then
+    echo "${miner_name} already installed: ${miner_bin}"
+    return
+  fi
+
+  if [[ -z "${miner_url}" ]]; then
+    echo "${miner_name} is missing and no download URL is configured."
+    echo "Set ${url_var_name} or install it manually at:"
+    echo "  ${miner_bin}"
+    exit 1
+  fi
+
+  echo "Installing ${miner_name} to ${miner_dir}"
+  require_command tar
+  install -d -m 0755 "${miner_dir}"
+  tmp_file="$(mktemp)"
+  tmp_dir="$(mktemp -d)"
+  if ! download_file "${miner_url}" "${tmp_file}" "${url_var_name}"; then
+    rm -rf "${tmp_dir}"
+    rm -f "${tmp_file}"
+    exit 1
+  fi
+
+  if ! tar -xzf "${tmp_file}" -C "${tmp_dir}"; then
+    echo "Downloaded archive is not a valid gzip tar file: ${miner_url}"
+    rm -rf "${tmp_dir}"
+    rm -f "${tmp_file}"
+    exit 1
+  fi
+
+  extracted_bin="$(find "${tmp_dir}" -type f -name "$(basename "${miner_bin}")" -print -quit)"
+  if [[ -z "${extracted_bin}" ]]; then
+    echo "Could not find ${miner_name} binary inside downloaded archive: ${miner_url}"
+    rm -rf "${tmp_dir}"
+    rm -f "${tmp_file}"
+    exit 1
+  fi
+
+  extracted_dir="$(dirname "${extracted_bin}")"
+  cp -R "${extracted_dir}/." "${miner_dir}/"
+  chmod +x "${miner_bin}"
+  rm -rf "${tmp_dir}"
+  rm -f "${tmp_file}"
+}
+
 install_default_configs() {
+  local local_listen
+  local local_pool_address
+
   install -d -m 0755 "${CONFIG_DIR}"
 
   if [[ ! -f "${MINER_CONFIG}" ]]; then
@@ -188,6 +251,10 @@ install_default_configs() {
     install -m 0644 "${ROOT_DIR}/configs/profiles.env" "${PROFILES_CONFIG}"
   fi
 
+  local_listen="$(read_env_value "${PROFILES_CONFIG}" LOCAL_LISTEN)"
+  local_listen="${local_listen:-tcp://127.0.0.1:3333}"
+  local_pool_address="${local_listen#*://}"
+
   replace_env_value_if_present "${MINER_CONFIG}" MINER_BIN "${LPMINER_BIN}"
   replace_env_value_if_present "${MINER_CONFIG}" MINER_WORKDIR "${LPMINER_DIR}"
   replace_env_value_if_present "${PROFILES_CONFIG}" LUCKYPOOL_MINER_BIN "${LPMINER_BIN}"
@@ -196,23 +263,37 @@ install_default_configs() {
   replace_env_value_if_present "${PROFILES_CONFIG}" ALPHAPOOL_MINER_WORKDIR "${ALPHA_MINER_DIR}"
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLHASH_MINER_BIN "${PEARLHASH_MINER_BIN}"
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLHASH_MINER_WORKDIR "${PEARLHASH_MINER_DIR}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_BIN "${PEARLFORTUNE_AMD_BIN}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_WORKDIR "${PEARLFORTUNE_AMD_DIR}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_LD_LIBRARY_PATH "${PEARLFORTUNE_AMD_DIR}/lib"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL "${DEFAULT_LPMINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL "${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL "${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_AMD_DOWNLOAD_URL "${DEFAULT_PEARLFORTUNE_AMD_DOWNLOAD_URL}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_TARGET_HOST "global.pearlfortune.org"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_TARGET_PORT "443"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_BIN "${PEARLFORTUNE_AMD_BIN}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_WORKDIR "${PEARLFORTUNE_AMD_DIR}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_POOL "${local_listen}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_LD_LIBRARY_PATH "${PEARLFORTUNE_AMD_DIR}/lib"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_ARGS "\"--proxy ${local_pool_address} --address prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma --worker \${WORKER_NAME} -gpu\""
 }
 
 resolve_download_urls() {
   local profile_lpminer_url
   local profile_alpha_miner_url
   local profile_pearlhash_miner_url
+  local profile_pearlfortune_amd_url
 
   profile_lpminer_url="$(read_env_value "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL)"
   profile_alpha_miner_url="$(read_env_value "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL)"
   profile_pearlhash_miner_url="$(read_env_value "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL)"
+  profile_pearlfortune_amd_url="$(read_env_value "${PROFILES_CONFIG}" PEARLFORTUNE_AMD_DOWNLOAD_URL)"
 
   LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-${profile_lpminer_url:-${DEFAULT_LPMINER_DOWNLOAD_URL}}}"
   ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-${profile_alpha_miner_url:-${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}}}"
   PEARLHASH_MINER_DOWNLOAD_URL="${PEARLHASH_MINER_DOWNLOAD_URL:-${profile_pearlhash_miner_url:-${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}}}"
+  PEARLFORTUNE_AMD_DOWNLOAD_URL="${PEARLFORTUNE_AMD_DOWNLOAD_URL:-${profile_pearlfortune_amd_url:-${DEFAULT_PEARLFORTUNE_AMD_DOWNLOAD_URL}}}"
 }
 
 check_client_tunnel_if_installed() {
@@ -265,6 +346,7 @@ resolve_download_urls
 install_binary_miner lpminer "${LPMINER_DOWNLOAD_URL}" "${LPMINER_DIR}" "${LPMINER_BIN}" LPMINER_DOWNLOAD_URL
 install_binary_miner alpha-miner "${ALPHA_MINER_DOWNLOAD_URL}" "${ALPHA_MINER_DIR}" "${ALPHA_MINER_BIN}" ALPHA_MINER_DOWNLOAD_URL
 install_binary_miner pearlhash-miner "${PEARLHASH_MINER_DOWNLOAD_URL}" "${PEARLHASH_MINER_DIR}" "${PEARLHASH_MINER_BIN}" PEARLHASH_MINER_DOWNLOAD_URL
+install_archive_dir_miner pearlfortune-amd "${PEARLFORTUNE_AMD_DOWNLOAD_URL}" "${PEARLFORTUNE_AMD_DIR}" "${PEARLFORTUNE_AMD_BIN}" PEARLFORTUNE_AMD_DOWNLOAD_URL
 install_services
 check_client_tunnel_if_installed
 
@@ -274,8 +356,10 @@ echo "Miner paths:"
 echo "  lpminer:      ${LPMINER_BIN}"
 echo "  alpha-miner:  ${ALPHA_MINER_BIN}"
 echo "  pearlhash:    ${PEARLHASH_MINER_BIN}"
+echo "  pearlfortune: ${PEARLFORTUNE_AMD_BIN}"
 echo
 echo "Start a profile:"
 echo "  sudo ./scripts/start_pearl_miners.sh luckypool"
 echo "  sudo ./scripts/start_pearl_miners.sh alphapool"
 echo "  sudo ./scripts/start_pearl_miners.sh pearlhash"
+echo "  sudo ./scripts/start_pearl_miners.sh pearlfortune"

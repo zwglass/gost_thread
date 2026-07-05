@@ -115,18 +115,20 @@ sudo ./scripts/install_pearl_miners.sh
 ```
 
 The installer checks `lpminer`, `alpha-miner`, Pearlhash's official
-`pearl-miner`. It installs local binaries under `~/programs/pearl_miners/` by
-default:
+`pearl-miner`, and Pearl Fortune's AMD miner. It installs local binaries under
+`~/programs/pearl_miners/` by default:
 
 ```text
 ~/programs/pearl_miners/lpminer/lpminer
 ~/programs/pearl_miners/alpha_miner/alpha-miner
 ~/programs/pearl_miners/pearlhash/pearl-miner
+~/programs/pearl_miners/pearlfortune_amd/miner
 ```
 
-`LPMINER_DOWNLOAD_URL`, `ALPHA_MINER_DOWNLOAD_URL`, and
-`PEARLHASH_MINER_DOWNLOAD_URL` are read from `configs/profiles.env` by default.
-They can still be overridden with environment variables when needed.
+`LPMINER_DOWNLOAD_URL`, `ALPHA_MINER_DOWNLOAD_URL`,
+`PEARLHASH_MINER_DOWNLOAD_URL`, and `PEARLFORTUNE_AMD_DOWNLOAD_URL` are read from
+`configs/profiles.env` by default. They can still be overridden with environment
+variables when needed.
 
 The installer stops and disables miner services after installation. Start the
 wanted profile with `start_pearl_miners.sh`; it enables `pearl-miner.service`.
@@ -137,6 +139,7 @@ Switch the active pool and miner profile:
 sudo ./scripts/switch_profile.sh luckypool
 sudo ./scripts/switch_profile.sh alphapool
 sudo ./scripts/switch_profile.sh pearlhash
+sudo ./scripts/switch_profile.sh pearlfortune
 ```
 
 The `pearlhash` profile follows the command shape from
@@ -161,12 +164,45 @@ The resulting path is:
 pearl-miner -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:9000
 ```
 
+The `pearlfortune` profile follows the AMD command shape from
+https://github.com/pearlfortune/pearl-miner. The verified downloadable AMD
+release asset is `pearlfortune-amd-v1.2.2.fix.tar.gz`; keep the extracted
+`lib/` directory and start the miner as:
+
+```bash
+LD_LIBRARY_PATH=./lib:$LD_LIBRARY_PATH ./miner \
+  --proxy global.pearlfortune.org:443 \
+  --address {prl-address} \
+  --worker $(hostname) \
+  -gpu
+```
+
+In this project the miner still connects to the local GOST tunnel:
+
+```bash
+${PEARL_MINERS_DIR}/pearlfortune_amd/miner \
+  --proxy 127.0.0.1:3333 \
+  --address prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma \
+  --worker rtx3090 \
+  -gpu
+```
+
+The service exports `MINER_LD_LIBRARY_PATH` for this profile so the AMD miner
+can load `${PEARL_MINERS_DIR}/pearlfortune_amd/lib`.
+
+The resulting path is:
+
+```text
+miner -> 127.0.0.1:3333 -> gost-client.service -> global.pearlfortune.org:443
+```
+
 The same profile argument can be passed when starting services:
 
 ```bash
 ./scripts/start_client.sh luckypool
 ./scripts/start_pearl_miners.sh alphapool
 ./scripts/start_pearl_miners.sh pearlhash
+./scripts/start_pearl_miners.sh pearlfortune
 ```
 
 Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
@@ -204,6 +240,7 @@ View current miner process and installed config:
 ps -fp $(pidof lpminer)
 ps -fp $(pidof alpha-miner)
 ps -fp $(pidof pearl-miner)
+ps -fp $(pidof miner)
 sudo cat /etc/gost-thread/miner.env
 sudo cat /etc/gost-thread/profiles.env
 ```
@@ -321,6 +358,7 @@ Client:
 ./scripts/start_client.sh luckypool
 ./scripts/start_client.sh alphapool
 ./scripts/start_client.sh pearlhash
+./scripts/start_client.sh pearlfortune
 ./scripts/stop_client.sh
 ```
 
@@ -331,6 +369,7 @@ Pearl Miners:
 ./scripts/start_pearl_miners.sh luckypool
 ./scripts/start_pearl_miners.sh alphapool
 ./scripts/start_pearl_miners.sh pearlhash
+./scripts/start_pearl_miners.sh pearlfortune
 ./scripts/stop_pearl_miners.sh
 ```
 
