@@ -114,14 +114,14 @@ Install Pearl miners on the client machine:
 sudo ./scripts/install_pearl_miners.sh
 ```
 
-The installer checks `lpminer`, `alpha-miner`, Pearlhash's official
-`pearl-miner`, and Pearl Fortune's CUDA miner. It installs local binaries under
+The installer checks `lpminer`, `alpha-miner`, WildRig Multi for Pearlhash, and
+Pearl Fortune's CUDA miner. It installs local binaries under
 `~/programs/pearl_miners/` by default:
 
 ```text
 ~/programs/pearl_miners/lpminer/lpminer
 ~/programs/pearl_miners/alpha_miner/alpha-miner
-~/programs/pearl_miners/pearlhash/pearl-miner
+~/programs/pearl_miners/pearlhash/wildrig-multi
 ~/programs/pearl_miners/pearlfortune/miner-cuda13
 ```
 
@@ -142,26 +142,34 @@ sudo ./scripts/switch_profile.sh pearlhash
 sudo ./scripts/switch_profile.sh pearlfortune
 ```
 
-The `pearlhash` profile follows the command shape from
-https://pearlhash.xyz/#start-mining. The official page currently offers:
+The `pearlhash` profile uses WildRig Multi from
+https://github.com/andru-kun/wildrig-multi. The project documents this command
+shape:
 
 ```bash
-curl https://pearlhash.xyz/downloads/pearl-miner-v12 -o pearl-miner && chmod +x pearl-miner
-./pearl-miner --host pool.pearlhash.xyz:9000 --user <address>
+./wildrig-multi \
+  --algo pearl \
+  --url stratum+tcp://pool.pearlhash.xyz:9000 \
+  --user <address> \
+  --pass x \
+  --worker <worker>
 ```
 
 In this project the miner still connects to the local GOST tunnel:
 
 ```bash
-${PEARL_MINERS_DIR}/pearlhash/pearl-miner \
-  --host 127.0.0.1:3333 \
-  --user prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma.rtx3090
+${PEARL_MINERS_DIR}/pearlhash/wildrig-multi \
+  --algo pearl \
+  --url stratum+tcp://127.0.0.1:3333 \
+  --user prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma \
+  --pass x \
+  --worker rtx3090
 ```
 
 The resulting path is:
 
 ```text
-pearl-miner -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:9000
+wildrig-multi -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:9000
 ```
 
 The `pearlfortune` profile follows the CUDA command shape from
@@ -236,7 +244,7 @@ View current miner process and installed config:
 ```bash
 ps -fp $(pidof lpminer)
 ps -fp $(pidof alpha-miner)
-ps -fp $(pidof pearl-miner)
+ps -fp $(pidof wildrig-multi)
 ps -fp $(pidof miner)
 sudo cat /etc/gost-thread/miner.env
 sudo cat /etc/gost-thread/profiles.env
@@ -405,7 +413,7 @@ sudo journalctl -u pearl-miner -f
 Recent Pearl miner logs:
 
 ```bash
-sudo journalctl -u pearl-miner -n 100 --no-pager
+sudo journalctl -u pearl-miner -n 50 --no-pager
 ```
 
 ## Uninstall

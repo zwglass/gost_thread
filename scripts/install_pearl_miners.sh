@@ -9,7 +9,8 @@ MINER_CONFIG="${CONFIG_DIR}/miner.env"
 PROFILES_CONFIG="${CONFIG_DIR}/profiles.env"
 DEFAULT_ALPHA_MINER_DOWNLOAD_URL="https://pearl.alphapool.tech/downloads/alpha-miner"
 DEFAULT_LPMINER_DOWNLOAD_URL="https://pearl.luckypool.io/lpminer/lpminer-0.1.9.tar.gz"
-DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL="https://pearlhash.xyz/downloads/pearl-miner-v12"
+DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL="https://github.com/andru-kun/wildrig-multi/releases/download/0.49.2/wildrig-multi-linux-0.49.2.tar.gz"
+LEGACY_PEARLHASH_MINER_DOWNLOAD_URL="https://pearlhash.xyz/downloads/pearl-miner-v12"
 DEFAULT_PEARLFORTUNE_DOWNLOAD_URL="https://github.com/pearlfortune/pearl-miner/releases/download/v1.2.3/pearlfortune-v1.2.3.tar.gz"
 ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-}"
 LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-}"
@@ -38,7 +39,7 @@ LPMINER_BIN="${LPMINER_BIN:-${LPMINER_DIR}/lpminer}"
 ALPHA_MINER_DIR="${ALPHA_MINER_DIR:-${MINERS_BASE_DIR}/alpha_miner}"
 ALPHA_MINER_BIN="${ALPHA_MINER_BIN:-${ALPHA_MINER_DIR}/alpha-miner}"
 PEARLHASH_MINER_DIR="${PEARLHASH_MINER_DIR:-${MINERS_BASE_DIR}/pearlhash}"
-PEARLHASH_MINER_BIN="${PEARLHASH_MINER_BIN:-${PEARLHASH_MINER_DIR}/pearl-miner}"
+PEARLHASH_MINER_BIN="${PEARLHASH_MINER_BIN:-${PEARLHASH_MINER_DIR}/wildrig-multi}"
 PEARLFORTUNE_DIR="${PEARLFORTUNE_DIR:-${MINERS_BASE_DIR}/pearlfortune}"
 PEARLFORTUNE_BIN="${PEARLFORTUNE_BIN:-${PEARLFORTUNE_DIR}/miner-cuda13}"
 
@@ -85,6 +86,19 @@ replace_env_value_if_present() {
   fi
 }
 
+replace_env_value_if_equals() {
+  local file="$1"
+  local key="$2"
+  local old_value="$3"
+  local new_value="$4"
+  local current_value
+
+  current_value="$(read_env_value "${file}" "${key}")"
+  if [[ "${current_value}" == "${old_value}" ]]; then
+    replace_env_value_if_present "${file}" "${key}" "${new_value}"
+  fi
+}
+
 ensure_env_value_if_missing() {
   local file="$1"
   local key="$2"
@@ -93,6 +107,14 @@ ensure_env_value_if_missing() {
   if ! grep -q "^${key}=" "${file}"; then
     echo "${key}=${value}" >>"${file}"
   fi
+}
+
+extract_pearlhash_user() {
+  local miner_args="$1"
+  local wallet
+
+  wallet="$(printf "%s\n" "${miner_args}" | sed -n "s/.*--user[[:space:]]\\([^[:space:]'\\\"]*\\).*/\\1/p" | head -n 1)"
+  printf "%s" "${wallet:-prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma}"
 }
 
 download_file() {
@@ -240,6 +262,8 @@ install_archive_dir_miner() {
 install_default_configs() {
   local local_listen
   local local_pool_address
+  local pearlhash_args
+  local pearlhash_user
 
   install -d -m 0755 "${CONFIG_DIR}"
 
@@ -254,6 +278,8 @@ install_default_configs() {
   local_listen="$(read_env_value "${PROFILES_CONFIG}" LOCAL_LISTEN)"
   local_listen="${local_listen:-tcp://127.0.0.1:3333}"
   local_pool_address="${local_listen#*://}"
+  pearlhash_args="$(read_env_value "${PROFILES_CONFIG}" PEARLHASH_MINER_ARGS)"
+  pearlhash_user="$(extract_pearlhash_user "${pearlhash_args}")"
 
   replace_env_value_if_present "${MINER_CONFIG}" MINER_BIN "${LPMINER_BIN}"
   replace_env_value_if_present "${MINER_CONFIG}" MINER_WORKDIR "${LPMINER_DIR}"
@@ -263,6 +289,11 @@ install_default_configs() {
   replace_env_value_if_present "${PROFILES_CONFIG}" ALPHAPOOL_MINER_WORKDIR "${ALPHA_MINER_DIR}"
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLHASH_MINER_BIN "${PEARLHASH_MINER_BIN}"
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLHASH_MINER_WORKDIR "${PEARLHASH_MINER_DIR}"
+  replace_env_value_if_equals "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL "${LEGACY_PEARLHASH_MINER_DOWNLOAD_URL}" "${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" PEARLHASH_MINER_POOL "stratum+tcp://${local_pool_address}"
+  if [[ -z "${pearlhash_args}" || "${pearlhash_args}" == *"--host "* ]]; then
+    replace_env_value_if_present "${PROFILES_CONFIG}" PEARLHASH_MINER_ARGS "\"--algo pearl --url stratum+tcp://${local_pool_address} --user ${pearlhash_user} --pass x --worker \${WORKER_NAME}\""
+  fi
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_BIN "${PEARLFORTUNE_BIN}"
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_WORKDIR "${PEARLFORTUNE_DIR}"
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_LD_LIBRARY_PATH ""
@@ -270,6 +301,12 @@ install_default_configs() {
   ensure_env_value_if_missing "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL "${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL "${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_DOWNLOAD_URL "${DEFAULT_PEARLFORTUNE_DOWNLOAD_URL}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_TARGET_HOST "pool.pearlhash.xyz"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_TARGET_PORT "9000"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_BIN "${PEARLHASH_MINER_BIN}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_WORKDIR "${PEARLHASH_MINER_DIR}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_POOL "stratum+tcp://${local_pool_address}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_ARGS "\"--algo pearl --url stratum+tcp://${local_pool_address} --user ${pearlhash_user} --pass x --worker \${WORKER_NAME}\""
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_TARGET_HOST "global.pearlfortune.org"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_TARGET_PORT "443"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_BIN "${PEARLFORTUNE_BIN}"
@@ -330,6 +367,7 @@ check_client_tunnel_if_installed() {
 
 install_services() {
   install -d -m 0755 "${LIBEXEC_DIR}"
+  install -d -m 0755 "${SYSTEMD_DIR}"
   install -m 0755 "${ROOT_DIR}/scripts/wait_for_pearl_miner_pool.sh" "${LIBEXEC_DIR}/wait-for-pearl-miner-pool"
   install -m 0644 "${ROOT_DIR}/systemd/pearl-miner.service" "${SYSTEMD_DIR}/pearl-miner.service"
 
@@ -344,7 +382,7 @@ install_default_configs
 resolve_download_urls
 install_binary_miner lpminer "${LPMINER_DOWNLOAD_URL}" "${LPMINER_DIR}" "${LPMINER_BIN}" LPMINER_DOWNLOAD_URL
 install_binary_miner alpha-miner "${ALPHA_MINER_DOWNLOAD_URL}" "${ALPHA_MINER_DIR}" "${ALPHA_MINER_BIN}" ALPHA_MINER_DOWNLOAD_URL
-install_binary_miner pearlhash-miner "${PEARLHASH_MINER_DOWNLOAD_URL}" "${PEARLHASH_MINER_DIR}" "${PEARLHASH_MINER_BIN}" PEARLHASH_MINER_DOWNLOAD_URL
+install_archive_dir_miner wildrig-multi "${PEARLHASH_MINER_DOWNLOAD_URL}" "${PEARLHASH_MINER_DIR}" "${PEARLHASH_MINER_BIN}" PEARLHASH_MINER_DOWNLOAD_URL
 install_archive_dir_miner pearlfortune "${PEARLFORTUNE_DOWNLOAD_URL}" "${PEARLFORTUNE_DIR}" "${PEARLFORTUNE_BIN}" PEARLFORTUNE_DOWNLOAD_URL
 install_services
 check_client_tunnel_if_installed
