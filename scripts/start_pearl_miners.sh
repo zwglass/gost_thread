@@ -68,6 +68,12 @@ profile_value() {
   printf "%s" "${!key:-}"
 }
 
+list_profiles() {
+  sed -n 's/^\([A-Z0-9_][A-Z0-9_]*\)_TARGET_HOST=.*/\1/p' "${PROFILES_FILE}" \
+    | tr "[:upper:]_" "[:lower:]-" \
+    | sort
+}
+
 tcp_probe() {
   local host="$1"
   local port="$2"
@@ -162,6 +168,13 @@ if [[ "$#" -eq 1 ]]; then
 
   prefix="$(profile_prefix "${profile}")"
   selected_service="$(profile_value "${prefix}" MINER_SERVICE)"
+  if [[ -z "$(profile_value "${prefix}" TARGET_HOST)" ]]; then
+    echo "Unknown profile: ${profile}"
+    echo "Available profiles:"
+    list_profiles | sed 's/^/  /'
+    exit 1
+  fi
+
   if [[ -n "${selected_service}" ]]; then
     echo "${prefix}_MINER_SERVICE is no longer supported."
     echo "Use a pearl-miner.service profile with MINER_BIN, MINER_WORKDIR, MINER_POOL, and MINER_ARGS."

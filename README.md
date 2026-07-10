@@ -114,8 +114,8 @@ Install Pearl miners on the client machine:
 sudo ./scripts/install_pearl_miners.sh
 ```
 
-The installer checks `lpminer`, `alpha-miner`, WildRig Multi for Pearlhash, and
-Pearl Fortune's CUDA miner. It installs local binaries under
+The installer checks `lpminer`, `alpha-miner`, WildRig Multi for Pearlhash,
+Pearl Fortune's CUDA miner, and PeakMiner for HeroMiners. It installs local binaries under
 `~/programs/pearl_miners/` by default:
 
 ```text
@@ -123,10 +123,12 @@ Pearl Fortune's CUDA miner. It installs local binaries under
 ~/programs/pearl_miners/alpha_miner/alpha-miner
 ~/programs/pearl_miners/pearlhash/wildrig-multi
 ~/programs/pearl_miners/pearlfortune/miner-cuda13
+~/programs/pearl_miners/peakminer/peakminer
 ```
 
 `LPMINER_DOWNLOAD_URL`, `ALPHA_MINER_DOWNLOAD_URL`,
-`PEARLHASH_MINER_DOWNLOAD_URL`, and `PEARLFORTUNE_DOWNLOAD_URL` are read from
+`PEARLHASH_MINER_DOWNLOAD_URL`, `PEARLFORTUNE_DOWNLOAD_URL`, and
+`PEAKMINER_DOWNLOAD_URL` are read from
 `configs/profiles.env` by default. They can still be overridden with environment
 variables when needed.
 
@@ -140,6 +142,7 @@ sudo ./scripts/switch_profile.sh luckypool
 sudo ./scripts/switch_profile.sh alphapool
 sudo ./scripts/switch_profile.sh pearlhash
 sudo ./scripts/switch_profile.sh pearlfortune
+sudo ./scripts/switch_profile.sh herominers
 ```
 
 The `pearlhash` profile uses WildRig Multi from
@@ -201,13 +204,46 @@ The resulting path is:
 miner-cuda13 -> 127.0.0.1:3333 -> gost-client.service -> global.pearlfortune.org:443
 ```
 
+The `herominers` profile uses PeakMiner from
+https://github.com/peakminer/peakminer. PeakMiner documents Pearl support over
+Stratum V1, Linux support with a bundled CUDA 12 runtime, and this command shape
+for HeroMiners:
+
+```bash
+peakminer \
+  --url de.pearl.herominers.com:1200 \
+  --user <wallet>.<worker>
+```
+
+This project installs the Linux single-file release asset:
+
+```text
+https://github.com/peakminer/peakminer/releases/download/v1.0.13/peakminer-1.0.13-linux-x86_64
+```
+
+In this project the miner still connects to the local GOST tunnel:
+
+```bash
+${PEARL_MINERS_DIR}/peakminer/peakminer \
+  --url 127.0.0.1:3333 \
+  --user prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma.rtx3090
+```
+
+The resulting path is:
+
+```text
+peakminer -> 127.0.0.1:3333 -> gost-client.service -> de.pearl.herominers.com:1200
+```
+
 The same profile argument can be passed when starting services:
 
 ```bash
 ./scripts/start_client.sh luckypool
+./scripts/start_client.sh herominers
 ./scripts/start_pearl_miners.sh alphapool
 ./scripts/start_pearl_miners.sh pearlhash
 ./scripts/start_pearl_miners.sh pearlfortune
+./scripts/start_pearl_miners.sh herominers
 ```
 
 Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
@@ -246,6 +282,7 @@ ps -fp $(pidof lpminer)
 ps -fp $(pidof alpha-miner)
 ps -fp $(pidof wildrig-multi)
 ps -fp $(pidof miner)
+ps -fp $(pidof peakminer)
 sudo cat /etc/gost-thread/miner.env
 sudo cat /etc/gost-thread/profiles.env
 ```
@@ -364,6 +401,7 @@ Client:
 ./scripts/start_client.sh alphapool
 ./scripts/start_client.sh pearlhash
 ./scripts/start_client.sh pearlfortune
+./scripts/start_client.sh herominers
 ./scripts/stop_client.sh
 ```
 
@@ -375,6 +413,7 @@ Pearl Miners:
 ./scripts/start_pearl_miners.sh alphapool
 ./scripts/start_pearl_miners.sh pearlhash
 ./scripts/start_pearl_miners.sh pearlfortune
+./scripts/start_pearl_miners.sh herominers
 ./scripts/stop_pearl_miners.sh
 ```
 

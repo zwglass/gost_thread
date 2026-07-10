@@ -178,6 +178,7 @@ configure_project() {
     sed -i "s|tcp://127.0.0.1:3333|tcp://127.0.0.1:${local_port}|g" "${INSTALL_DIR}/configs/profiles.env"
     sed -i "s|--host 127.0.0.1:3333|--host 127.0.0.1:${local_port}|g" "${INSTALL_DIR}/configs/profiles.env"
     sed -i "s|--proxy 127.0.0.1:3333|--proxy 127.0.0.1:${local_port}|g" "${INSTALL_DIR}/configs/profiles.env"
+    sed -i "s|--url 127.0.0.1:3333|--url 127.0.0.1:${local_port}|g" "${INSTALL_DIR}/configs/profiles.env"
     sed -i "s|stratum+tcp://127.0.0.1:3333|stratum+tcp://127.0.0.1:${local_port}|g" "${INSTALL_DIR}/configs/miner.env"
     sed -i "s|tcp://127.0.0.1:3333|tcp://127.0.0.1:${local_port}|g" "${INSTALL_DIR}/configs/miner.env"
   fi

@@ -75,6 +75,12 @@ restart_if_installed() {
   fi
 }
 
+list_profiles() {
+  sed -n 's/^\([A-Z0-9_][A-Z0-9_]*\)_TARGET_HOST=.*/\1/p' "${PROFILES_FILE}" \
+    | tr "[:upper:]_" "[:lower:]-" \
+    | sort
+}
+
 require_root
 
 if [[ ! -f "${PROFILES_FILE}" ]]; then
@@ -93,6 +99,8 @@ fi
 PROFILE="${1:-${DEFAULT_PROFILE:-}}"
 if [[ -z "${PROFILE}" ]]; then
   echo "Usage: sudo $0 <profile>"
+  echo "Available profiles:"
+  list_profiles | sed 's/^/  /'
   exit 1
 fi
 

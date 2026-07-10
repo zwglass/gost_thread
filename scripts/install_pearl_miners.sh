@@ -12,10 +12,12 @@ DEFAULT_LPMINER_DOWNLOAD_URL="https://pearl.luckypool.io/lpminer/lpminer-0.1.9.t
 DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL="https://github.com/andru-kun/wildrig-multi/releases/download/0.49.2/wildrig-multi-linux-0.49.2.tar.gz"
 LEGACY_PEARLHASH_MINER_DOWNLOAD_URL="https://pearlhash.xyz/downloads/pearl-miner-v12"
 DEFAULT_PEARLFORTUNE_DOWNLOAD_URL="https://github.com/pearlfortune/pearl-miner/releases/download/v1.2.3/pearlfortune-v1.2.3.tar.gz"
+DEFAULT_PEAKMINER_DOWNLOAD_URL="https://github.com/peakminer/peakminer/releases/download/v1.0.13/peakminer-1.0.13-linux-x86_64"
 ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-}"
 LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-}"
 PEARLHASH_MINER_DOWNLOAD_URL="${PEARLHASH_MINER_DOWNLOAD_URL:-}"
 PEARLFORTUNE_DOWNLOAD_URL="${PEARLFORTUNE_DOWNLOAD_URL:-}"
+PEAKMINER_DOWNLOAD_URL="${PEAKMINER_DOWNLOAD_URL:-}"
 
 detect_base_dir() {
   if [[ -n "${PEARL_MINERS_DIR:-}" ]]; then
@@ -42,6 +44,8 @@ PEARLHASH_MINER_DIR="${PEARLHASH_MINER_DIR:-${MINERS_BASE_DIR}/pearlhash}"
 PEARLHASH_MINER_BIN="${PEARLHASH_MINER_BIN:-${PEARLHASH_MINER_DIR}/wildrig-multi}"
 PEARLFORTUNE_DIR="${PEARLFORTUNE_DIR:-${MINERS_BASE_DIR}/pearlfortune}"
 PEARLFORTUNE_BIN="${PEARLFORTUNE_BIN:-${PEARLFORTUNE_DIR}/miner-cuda13}"
+PEAKMINER_DIR="${PEAKMINER_DIR:-${MINERS_BASE_DIR}/peakminer}"
+PEAKMINER_BIN="${PEAKMINER_BIN:-${PEAKMINER_DIR}/peakminer}"
 
 require_root() {
   if [[ "${EUID}" -ne 0 && "${CONFIG_DIR}" == "/etc/gost-thread" ]]; then
@@ -264,6 +268,7 @@ install_default_configs() {
   local local_pool_address
   local pearlhash_args
   local pearlhash_user
+  local peakminer_args
 
   install -d -m 0755 "${CONFIG_DIR}"
 
@@ -297,10 +302,18 @@ install_default_configs() {
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_BIN "${PEARLFORTUNE_BIN}"
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_WORKDIR "${PEARLFORTUNE_DIR}"
   replace_env_value_if_present "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_LD_LIBRARY_PATH ""
+  replace_env_value_if_present "${PROFILES_CONFIG}" HEROMINERS_MINER_BIN "${PEAKMINER_BIN}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" HEROMINERS_MINER_WORKDIR "${PEAKMINER_DIR}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" HEROMINERS_MINER_POOL "${local_listen}"
+  peakminer_args="$(read_env_value "${PROFILES_CONFIG}" HEROMINERS_MINER_ARGS)"
+  if [[ -z "${peakminer_args}" || "${peakminer_args}" != *"--url "* ]]; then
+    replace_env_value_if_present "${PROFILES_CONFIG}" HEROMINERS_MINER_ARGS "\"--url ${local_pool_address} --user ${pearlhash_user}.\${WORKER_NAME}\""
+  fi
   ensure_env_value_if_missing "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL "${DEFAULT_LPMINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL "${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL "${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_DOWNLOAD_URL "${DEFAULT_PEARLFORTUNE_DOWNLOAD_URL}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" PEAKMINER_DOWNLOAD_URL "${DEFAULT_PEAKMINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_TARGET_HOST "pool.pearlhash.xyz"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_TARGET_PORT "9000"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_BIN "${PEARLHASH_MINER_BIN}"
@@ -313,6 +326,12 @@ install_default_configs() {
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_WORKDIR "${PEARLFORTUNE_DIR}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_POOL "${local_listen}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_MINER_ARGS "\"--proxy ${local_pool_address} --address prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma --worker \${WORKER_NAME} -gpu\""
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_TARGET_HOST "de.pearl.herominers.com"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_TARGET_PORT "1200"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_MINER_BIN "${PEAKMINER_BIN}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_MINER_WORKDIR "${PEAKMINER_DIR}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_MINER_POOL "${local_listen}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_MINER_ARGS "\"--url ${local_pool_address} --user ${pearlhash_user}.\${WORKER_NAME}\""
 }
 
 resolve_download_urls() {
@@ -320,16 +339,19 @@ resolve_download_urls() {
   local profile_alpha_miner_url
   local profile_pearlhash_miner_url
   local profile_pearlfortune_url
+  local profile_peakminer_url
 
   profile_lpminer_url="$(read_env_value "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL)"
   profile_alpha_miner_url="$(read_env_value "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL)"
   profile_pearlhash_miner_url="$(read_env_value "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL)"
   profile_pearlfortune_url="$(read_env_value "${PROFILES_CONFIG}" PEARLFORTUNE_DOWNLOAD_URL)"
+  profile_peakminer_url="$(read_env_value "${PROFILES_CONFIG}" PEAKMINER_DOWNLOAD_URL)"
 
   LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-${profile_lpminer_url:-${DEFAULT_LPMINER_DOWNLOAD_URL}}}"
   ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-${profile_alpha_miner_url:-${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}}}"
   PEARLHASH_MINER_DOWNLOAD_URL="${PEARLHASH_MINER_DOWNLOAD_URL:-${profile_pearlhash_miner_url:-${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}}}"
   PEARLFORTUNE_DOWNLOAD_URL="${PEARLFORTUNE_DOWNLOAD_URL:-${profile_pearlfortune_url:-${DEFAULT_PEARLFORTUNE_DOWNLOAD_URL}}}"
+  PEAKMINER_DOWNLOAD_URL="${PEAKMINER_DOWNLOAD_URL:-${profile_peakminer_url:-${DEFAULT_PEAKMINER_DOWNLOAD_URL}}}"
 }
 
 check_client_tunnel_if_installed() {
@@ -384,6 +406,7 @@ install_binary_miner lpminer "${LPMINER_DOWNLOAD_URL}" "${LPMINER_DIR}" "${LPMIN
 install_binary_miner alpha-miner "${ALPHA_MINER_DOWNLOAD_URL}" "${ALPHA_MINER_DIR}" "${ALPHA_MINER_BIN}" ALPHA_MINER_DOWNLOAD_URL
 install_archive_dir_miner wildrig-multi "${PEARLHASH_MINER_DOWNLOAD_URL}" "${PEARLHASH_MINER_DIR}" "${PEARLHASH_MINER_BIN}" PEARLHASH_MINER_DOWNLOAD_URL
 install_archive_dir_miner pearlfortune "${PEARLFORTUNE_DOWNLOAD_URL}" "${PEARLFORTUNE_DIR}" "${PEARLFORTUNE_BIN}" PEARLFORTUNE_DOWNLOAD_URL
+install_binary_miner peakminer "${PEAKMINER_DOWNLOAD_URL}" "${PEAKMINER_DIR}" "${PEAKMINER_BIN}" PEAKMINER_DOWNLOAD_URL
 install_services
 check_client_tunnel_if_installed
 
@@ -394,9 +417,11 @@ echo "  lpminer:      ${LPMINER_BIN}"
 echo "  alpha-miner:  ${ALPHA_MINER_BIN}"
 echo "  pearlhash:    ${PEARLHASH_MINER_BIN}"
 echo "  pearlfortune: ${PEARLFORTUNE_BIN}"
+echo "  peakminer:    ${PEAKMINER_BIN}"
 echo
 echo "Start a profile:"
 echo "  sudo ./scripts/start_pearl_miners.sh luckypool"
 echo "  sudo ./scripts/start_pearl_miners.sh alphapool"
 echo "  sudo ./scripts/start_pearl_miners.sh pearlhash"
 echo "  sudo ./scripts/start_pearl_miners.sh pearlfortune"
+echo "  sudo ./scripts/start_pearl_miners.sh herominers"
