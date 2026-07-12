@@ -115,8 +115,9 @@ sudo ./scripts/install_pearl_miners.sh
 ```
 
 The installer checks `lpminer`, `alpha-miner`, WildRig Multi for Pearlhash,
-Pearl Fortune's CUDA miner, and PeakMiner for HeroMiners. It installs local binaries under
-`~/programs/pearl_miners/` by default:
+Pearl Fortune's CUDA miner, PeakMiner for HeroMiners, and SRBMiner-Multi for
+Kryptex. It installs local binaries under `~/programs/pearl_miners/` by
+default:
 
 ```text
 ~/programs/pearl_miners/lpminer/lpminer
@@ -124,11 +125,12 @@ Pearl Fortune's CUDA miner, and PeakMiner for HeroMiners. It installs local bina
 ~/programs/pearl_miners/pearlhash/wildrig-multi
 ~/programs/pearl_miners/pearlfortune/miner-cuda13
 ~/programs/pearl_miners/peakminer/peakminer
+~/programs/pearl_miners/srbminer/SRBMiner-MULTI
 ```
 
 `LPMINER_DOWNLOAD_URL`, `ALPHA_MINER_DOWNLOAD_URL`,
-`PEARLHASH_MINER_DOWNLOAD_URL`, `PEARLFORTUNE_DOWNLOAD_URL`, and
-`PEAKMINER_DOWNLOAD_URL` are read from
+`PEARLHASH_MINER_DOWNLOAD_URL`, `PEARLFORTUNE_DOWNLOAD_URL`,
+`PEAKMINER_DOWNLOAD_URL`, and `SRBMINER_DOWNLOAD_URL` are read from
 `configs/profiles.env` by default. They can still be overridden with environment
 variables when needed.
 
@@ -143,6 +145,7 @@ sudo ./scripts/switch_profile.sh alphapool
 sudo ./scripts/switch_profile.sh pearlhash
 sudo ./scripts/switch_profile.sh pearlfortune
 sudo ./scripts/switch_profile.sh herominers
+sudo ./scripts/switch_profile.sh kryptex
 ```
 
 The `pearlhash` profile uses WildRig Multi from
@@ -235,15 +238,50 @@ The resulting path is:
 peakminer -> 127.0.0.1:3333 -> gost-client.service -> de.pearl.herominers.com:1200
 ```
 
+The `kryptex` profile uses SRBMiner-Multi from
+https://github.com/doktor83/SRBMiner-Multi. Kryptex lists Pearl as the
+`PearlHash` algorithm and the Global non-SSL endpoint as:
+
+```text
+prl.kryptex.network:7048
+```
+
+SRBMiner-Multi documents this general command shape:
+
+```bash
+./SRBMiner-MULTI \
+  --algorithm <algorithm> \
+  --pool <pool-host:port> \
+  --wallet <wallet>
+```
+
+In this project the miner still connects to the local GOST tunnel:
+
+```bash
+${PEARL_MINERS_DIR}/srbminer/SRBMiner-MULTI \
+  --algorithm pearlhash \
+  --pool 127.0.0.1:3333 \
+  --wallet prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma.rtx3090 \
+  --password x
+```
+
+The resulting path is:
+
+```text
+SRBMiner-MULTI -> 127.0.0.1:3333 -> gost-client.service -> prl.kryptex.network:7048
+```
+
 The same profile argument can be passed when starting services:
 
 ```bash
 ./scripts/start_client.sh luckypool
 ./scripts/start_client.sh herominers
+./scripts/start_client.sh kryptex
 ./scripts/start_pearl_miners.sh alphapool
 ./scripts/start_pearl_miners.sh pearlhash
 ./scripts/start_pearl_miners.sh pearlfortune
 ./scripts/start_pearl_miners.sh herominers
+./scripts/start_pearl_miners.sh kryptex
 ```
 
 Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
@@ -283,6 +321,7 @@ ps -fp $(pidof alpha-miner)
 ps -fp $(pidof wildrig-multi)
 ps -fp $(pidof miner)
 ps -fp $(pidof peakminer)
+ps -fp $(pidof SRBMiner-MULTI)
 sudo cat /etc/gost-thread/miner.env
 sudo cat /etc/gost-thread/profiles.env
 ```
@@ -402,6 +441,7 @@ Client:
 ./scripts/start_client.sh pearlhash
 ./scripts/start_client.sh pearlfortune
 ./scripts/start_client.sh herominers
+./scripts/start_client.sh kryptex
 ./scripts/stop_client.sh
 ```
 
@@ -414,6 +454,7 @@ Pearl Miners:
 ./scripts/start_pearl_miners.sh pearlhash
 ./scripts/start_pearl_miners.sh pearlfortune
 ./scripts/start_pearl_miners.sh herominers
+./scripts/start_pearl_miners.sh kryptex
 ./scripts/stop_pearl_miners.sh
 ```
 

@@ -13,11 +13,13 @@ DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL="https://github.com/andru-kun/wildrig-multi
 LEGACY_PEARLHASH_MINER_DOWNLOAD_URL="https://pearlhash.xyz/downloads/pearl-miner-v12"
 DEFAULT_PEARLFORTUNE_DOWNLOAD_URL="https://github.com/pearlfortune/pearl-miner/releases/download/v1.2.3/pearlfortune-v1.2.3.tar.gz"
 DEFAULT_PEAKMINER_DOWNLOAD_URL="https://github.com/peakminer/peakminer/releases/download/v1.0.13/peakminer-1.0.13-linux-x86_64"
+DEFAULT_SRBMINER_DOWNLOAD_URL="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.6/SRBMiner-Multi-3-4-6-Linux.tar.gz"
 ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-}"
 LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-}"
 PEARLHASH_MINER_DOWNLOAD_URL="${PEARLHASH_MINER_DOWNLOAD_URL:-}"
 PEARLFORTUNE_DOWNLOAD_URL="${PEARLFORTUNE_DOWNLOAD_URL:-}"
 PEAKMINER_DOWNLOAD_URL="${PEAKMINER_DOWNLOAD_URL:-}"
+SRBMINER_DOWNLOAD_URL="${SRBMINER_DOWNLOAD_URL:-}"
 
 detect_base_dir() {
   if [[ -n "${PEARL_MINERS_DIR:-}" ]]; then
@@ -46,6 +48,8 @@ PEARLFORTUNE_DIR="${PEARLFORTUNE_DIR:-${MINERS_BASE_DIR}/pearlfortune}"
 PEARLFORTUNE_BIN="${PEARLFORTUNE_BIN:-${PEARLFORTUNE_DIR}/miner-cuda13}"
 PEAKMINER_DIR="${PEAKMINER_DIR:-${MINERS_BASE_DIR}/peakminer}"
 PEAKMINER_BIN="${PEAKMINER_BIN:-${PEAKMINER_DIR}/peakminer}"
+SRBMINER_DIR="${SRBMINER_DIR:-${MINERS_BASE_DIR}/srbminer}"
+SRBMINER_BIN="${SRBMINER_BIN:-${SRBMINER_DIR}/SRBMiner-MULTI}"
 
 require_root() {
   if [[ "${EUID}" -ne 0 && "${CONFIG_DIR}" == "/etc/gost-thread" ]]; then
@@ -309,11 +313,15 @@ install_default_configs() {
   if [[ -z "${peakminer_args}" || "${peakminer_args}" != *"--url "* ]]; then
     replace_env_value_if_present "${PROFILES_CONFIG}" HEROMINERS_MINER_ARGS "\"--url ${local_pool_address} --user ${pearlhash_user}.\${WORKER_NAME}\""
   fi
+  replace_env_value_if_present "${PROFILES_CONFIG}" KRYPTEX_MINER_BIN "${SRBMINER_BIN}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" KRYPTEX_MINER_WORKDIR "${SRBMINER_DIR}"
+  replace_env_value_if_present "${PROFILES_CONFIG}" KRYPTEX_MINER_POOL "${local_listen}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL "${DEFAULT_LPMINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL "${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL "${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLFORTUNE_DOWNLOAD_URL "${DEFAULT_PEARLFORTUNE_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEAKMINER_DOWNLOAD_URL "${DEFAULT_PEAKMINER_DOWNLOAD_URL}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" SRBMINER_DOWNLOAD_URL "${DEFAULT_SRBMINER_DOWNLOAD_URL}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_TARGET_HOST "pool.pearlhash.xyz"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_TARGET_PORT "9000"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" PEARLHASH_MINER_BIN "${PEARLHASH_MINER_BIN}"
@@ -332,6 +340,12 @@ install_default_configs() {
   ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_MINER_WORKDIR "${PEAKMINER_DIR}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_MINER_POOL "${local_listen}"
   ensure_env_value_if_missing "${PROFILES_CONFIG}" HEROMINERS_MINER_ARGS "\"--url ${local_pool_address} --user ${pearlhash_user}.\${WORKER_NAME}\""
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" KRYPTEX_TARGET_HOST "prl.kryptex.network"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" KRYPTEX_TARGET_PORT "7048"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" KRYPTEX_MINER_BIN "${SRBMINER_BIN}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" KRYPTEX_MINER_WORKDIR "${SRBMINER_DIR}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" KRYPTEX_MINER_POOL "${local_listen}"
+  ensure_env_value_if_missing "${PROFILES_CONFIG}" KRYPTEX_MINER_ARGS "\"--algorithm pearlhash --pool ${local_pool_address} --wallet ${pearlhash_user}.\${WORKER_NAME} --password x\""
 }
 
 resolve_download_urls() {
@@ -340,18 +354,21 @@ resolve_download_urls() {
   local profile_pearlhash_miner_url
   local profile_pearlfortune_url
   local profile_peakminer_url
+  local profile_srbminer_url
 
   profile_lpminer_url="$(read_env_value "${PROFILES_CONFIG}" LPMINER_DOWNLOAD_URL)"
   profile_alpha_miner_url="$(read_env_value "${PROFILES_CONFIG}" ALPHA_MINER_DOWNLOAD_URL)"
   profile_pearlhash_miner_url="$(read_env_value "${PROFILES_CONFIG}" PEARLHASH_MINER_DOWNLOAD_URL)"
   profile_pearlfortune_url="$(read_env_value "${PROFILES_CONFIG}" PEARLFORTUNE_DOWNLOAD_URL)"
   profile_peakminer_url="$(read_env_value "${PROFILES_CONFIG}" PEAKMINER_DOWNLOAD_URL)"
+  profile_srbminer_url="$(read_env_value "${PROFILES_CONFIG}" SRBMINER_DOWNLOAD_URL)"
 
   LPMINER_DOWNLOAD_URL="${LPMINER_DOWNLOAD_URL:-${profile_lpminer_url:-${DEFAULT_LPMINER_DOWNLOAD_URL}}}"
   ALPHA_MINER_DOWNLOAD_URL="${ALPHA_MINER_DOWNLOAD_URL:-${profile_alpha_miner_url:-${DEFAULT_ALPHA_MINER_DOWNLOAD_URL}}}"
   PEARLHASH_MINER_DOWNLOAD_URL="${PEARLHASH_MINER_DOWNLOAD_URL:-${profile_pearlhash_miner_url:-${DEFAULT_PEARLHASH_MINER_DOWNLOAD_URL}}}"
   PEARLFORTUNE_DOWNLOAD_URL="${PEARLFORTUNE_DOWNLOAD_URL:-${profile_pearlfortune_url:-${DEFAULT_PEARLFORTUNE_DOWNLOAD_URL}}}"
   PEAKMINER_DOWNLOAD_URL="${PEAKMINER_DOWNLOAD_URL:-${profile_peakminer_url:-${DEFAULT_PEAKMINER_DOWNLOAD_URL}}}"
+  SRBMINER_DOWNLOAD_URL="${SRBMINER_DOWNLOAD_URL:-${profile_srbminer_url:-${DEFAULT_SRBMINER_DOWNLOAD_URL}}}"
 }
 
 check_client_tunnel_if_installed() {
@@ -407,6 +424,7 @@ install_binary_miner alpha-miner "${ALPHA_MINER_DOWNLOAD_URL}" "${ALPHA_MINER_DI
 install_archive_dir_miner wildrig-multi "${PEARLHASH_MINER_DOWNLOAD_URL}" "${PEARLHASH_MINER_DIR}" "${PEARLHASH_MINER_BIN}" PEARLHASH_MINER_DOWNLOAD_URL
 install_archive_dir_miner pearlfortune "${PEARLFORTUNE_DOWNLOAD_URL}" "${PEARLFORTUNE_DIR}" "${PEARLFORTUNE_BIN}" PEARLFORTUNE_DOWNLOAD_URL
 install_binary_miner peakminer "${PEAKMINER_DOWNLOAD_URL}" "${PEAKMINER_DIR}" "${PEAKMINER_BIN}" PEAKMINER_DOWNLOAD_URL
+install_archive_dir_miner SRBMiner-MULTI "${SRBMINER_DOWNLOAD_URL}" "${SRBMINER_DIR}" "${SRBMINER_BIN}" SRBMINER_DOWNLOAD_URL
 install_services
 check_client_tunnel_if_installed
 
@@ -418,6 +436,7 @@ echo "  alpha-miner:  ${ALPHA_MINER_BIN}"
 echo "  pearlhash:    ${PEARLHASH_MINER_BIN}"
 echo "  pearlfortune: ${PEARLFORTUNE_BIN}"
 echo "  peakminer:    ${PEAKMINER_BIN}"
+echo "  srbminer:     ${SRBMINER_BIN}"
 echo
 echo "Start a profile:"
 echo "  sudo ./scripts/start_pearl_miners.sh luckypool"
@@ -425,3 +444,4 @@ echo "  sudo ./scripts/start_pearl_miners.sh alphapool"
 echo "  sudo ./scripts/start_pearl_miners.sh pearlhash"
 echo "  sudo ./scripts/start_pearl_miners.sh pearlfortune"
 echo "  sudo ./scripts/start_pearl_miners.sh herominers"
+echo "  sudo ./scripts/start_pearl_miners.sh kryptex"
