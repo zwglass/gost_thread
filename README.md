@@ -16,7 +16,8 @@ configs/
   server.env              # server listen config
   client.env              # client forward config
   miner.env               # active miner runtime config
-  profiles.env            # miner and pool profiles
+  miners.env              # miner binaries and download sources
+  profiles.env            # pools, credentials, and compatibility rules
 scripts/
   install_gost.sh         # install config and systemd services
   install_pearl_miners.sh # install Pearl miner binaries and systemd services
@@ -38,6 +39,7 @@ logs/
 ## Requirements
 
 Install `gost` first and make sure the path matches `GOST_BIN` in the env files.
+GitHub-managed miner installation also requires `curl`, `jq`, and `tar`.
 
 Default path:
 
@@ -99,8 +101,14 @@ Configuration:
 
 ```bash
 configs/miner.env
+configs/miners.env
 configs/profiles.env
 ```
+
+`miners.env` owns download sources, executable paths, and working directories.
+`profiles.env` owns pool endpoints, wallets, passwords, default miners, and the
+allowed pool/miner combinations. `miner.env` is generated runtime state and
+stores each command argument separately so spaces and punctuation are preserved.
 
 Default expected binary:
 
@@ -114,39 +122,54 @@ Install Pearl miners on the client machine:
 sudo ./scripts/install_pearl_miners.sh
 ```
 
-The installer checks `lpminer`, `alpha-miner`, WildRig Multi for Pearlhash,
-Pearl Fortune's CUDA miner, PeakMiner for HeroMiners, and SRBMiner-Multi for
-Kryptex. It installs local binaries under `~/programs/pearl_miners/` by
-default:
+The installer supports `lpminer`, `alpha-miner`, WildRig Multi, Pearl Fortune,
+PeakMiner, SRBMiner-Multi, and `tw-pearl-miner`. It installs local binaries
+under `~/programs/pearl_miners/` by default:
 
 ```text
 ~/programs/pearl_miners/lpminer/lpminer
 ~/programs/pearl_miners/alpha_miner/alpha-miner
-~/programs/pearl_miners/pearlhash/wildrig-multi
+~/programs/pearl_miners/wildrig/wildrig-multi
 ~/programs/pearl_miners/pearlfortune/miner-cuda13
 ~/programs/pearl_miners/peakminer/peakminer
 ~/programs/pearl_miners/srbminer/SRBMiner-MULTI
+~/programs/pearl_miners/tw-pearl-miner/pearl-gpu-miner
 ```
 
-`LPMINER_DOWNLOAD_URL`, `ALPHA_MINER_DOWNLOAD_URL`,
-`PEARLHASH_MINER_DOWNLOAD_URL`, `PEARLFORTUNE_DOWNLOAD_URL`,
-`PEAKMINER_DOWNLOAD_URL`, and `SRBMINER_DOWNLOAD_URL` are read from
-`configs/profiles.env` by default. They can still be overridden with environment
-variables when needed.
-
-The installer stops and disables miner services after installation. Start the
-wanted profile with `start_pearl_miners.sh`; it enables `pearl-miner.service`.
-
-Switch the active pool and miner profile:
+Install one miner or update GitHub-managed miners explicitly:
 
 ```bash
-sudo ./scripts/switch_profile.sh luckypool
-sudo ./scripts/switch_profile.sh alphapool
-sudo ./scripts/switch_profile.sh pearlhash
-sudo ./scripts/switch_profile.sh pearlfortune
-sudo ./scripts/switch_profile.sh herominers
-sudo ./scripts/switch_profile.sh kryptex
+sudo ./scripts/install_pearl_miners.sh tw-pearl-miner
+sudo ./scripts/install_pearl_miners.sh --update wildrig tw-pearl-miner
+sudo ./scripts/install_pearl_miners.sh --all --update
 ```
+
+Without `--update`, an existing executable is left unchanged. With `--update`,
+GitHub miners query the latest stable Release, select exactly one configured
+Linux asset, verify its published SHA-256 digest when available, and update only
+when the release tag or asset changed. `lpminer` and `alpha-miner` remain pinned
+to their fixed URLs even when `--update` is supplied.
+
+`tw-pearl-miner` defaults to its Linux CUDA 12 archive (`*.c12.tar.gz`) and
+never matches Windows, B300, HiveOS, or MMPOS assets. Systems with an NVIDIA
+driver suitable for CUDA 13 can change `TW_PEARL_MINER_ASSET_REGEX` as described
+in `configs/miners.env`. Its command builder follows the options documented by
+[egg5233/tw-pearl-miner](https://github.com/egg5233/tw-pearl-miner): `--pool`,
+`--wallet`, `--worker`, AlphaPool `--password`, and `--pf` when PearlFortune is
+reached through the local GOST address.
+
+Switch the active pool and miner with explicit options:
+
+```bash
+sudo ./scripts/switch_profile.sh --pool luckypool --miner lpminer
+sudo ./scripts/switch_profile.sh --pool luckypool --miner tw-pearl-miner
+sudo ./scripts/switch_profile.sh --pool pearlhash --miner wildrig
+sudo ./scripts/switch_profile.sh --pool kryptex --miner srbminer
+```
+
+`--miner` may be omitted to use `<POOL>_DEFAULT_MINER`. Append literal runtime
+arguments with a repeatable option, for example `--miner-arg=--no-tui` or
+`--miner-arg=--gpus --miner-arg=0,1`.
 
 The `pearlhash` profile uses WildRig Multi from
 https://github.com/andru-kun/wildrig-multi. The project documents this command
@@ -164,7 +187,7 @@ shape:
 In this project the miner still connects to the local GOST tunnel:
 
 ```bash
-${PEARL_MINERS_DIR}/pearlhash/wildrig-multi \
+${PEARL_MINERS_DIR}/wildrig/wildrig-multi \
   --algo pearl \
   --url stratum+tcp://127.0.0.1:3333 \
   --user prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma \
@@ -178,14 +201,13 @@ The resulting path is:
 wildrig-multi -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:9000
 ```
 
-The `pearlfortune` profile follows the CUDA command shape from
-https://github.com/pearlfortune/pearl-miner. The downloadable release asset is
-`pearlfortune-v1.2.3.tar.gz`; the extracted folder is `pearlfortune`, and the
-default binary is `miner-cuda13`:
+The `pearlfortune` pool follows the CUDA command shape from
+https://github.com/pearlfortune/pearl-miner. The installer selects the stable
+Linux `pearlfortune-vX.Y.Z.tar.gz` Release asset and uses `miner-cuda13`:
 
 ```bash
 ./miner-cuda13 \
-  --proxy global.pearlfortune.org:443 \
+  --proxy global.pearlfortune.org:8888 \
   --address {prl-address} \
   --worker $(hostname) \
   -gpu
@@ -204,7 +226,7 @@ ${PEARL_MINERS_DIR}/pearlfortune/miner-cuda13 \
 The resulting path is:
 
 ```text
-miner-cuda13 -> 127.0.0.1:3333 -> gost-client.service -> global.pearlfortune.org:443
+miner-cuda13 -> 127.0.0.1:3333 -> gost-client.service -> global.pearlfortune.org:8888
 ```
 
 The `herominers` profile uses PeakMiner from
@@ -218,11 +240,8 @@ peakminer \
   --user <wallet>.<worker>
 ```
 
-This project installs the Linux single-file release asset:
-
-```text
-https://github.com/peakminer/peakminer/releases/download/v1.0.13/peakminer-1.0.13-linux-x86_64
-```
+This project resolves PeakMiner's latest stable Linux tar archive through the
+GitHub Releases API.
 
 In this project the miner still connects to the local GOST tunnel:
 
@@ -271,24 +290,21 @@ The resulting path is:
 SRBMiner-MULTI -> 127.0.0.1:3333 -> gost-client.service -> prl.kryptex.network:7048
 ```
 
-The same profile argument can be passed when starting services:
+The same explicit selection can be passed when starting services:
 
 ```bash
-./scripts/start_client.sh luckypool
-./scripts/start_client.sh herominers
-./scripts/start_client.sh kryptex
-./scripts/start_pearl_miners.sh alphapool
-./scripts/start_pearl_miners.sh pearlhash
-./scripts/start_pearl_miners.sh pearlfortune
-./scripts/start_pearl_miners.sh herominers
-./scripts/start_pearl_miners.sh kryptex
+./scripts/start_client.sh --pool luckypool --miner lpminer
+./scripts/start_pearl_miners.sh --pool alphapool --miner alpha-miner
+./scripts/start_pearl_miners.sh --pool pearlhash --miner wildrig
+./scripts/start_pearl_miners.sh --pool pearlfortune --miner tw-pearl-miner
+./scripts/start_pearl_miners.sh --pool herominers --miner peakminer
+./scripts/start_pearl_miners.sh --pool kryptex --miner srbminer
 ```
 
-Profiles are defined in `configs/profiles.env`. Each profile controls the GOST
-target pool endpoint, miner binary path, miner working directory, local miner
-pool, and full miner argument string. All supported profiles run through
-`pearl-miner.service`. `./scripts/stop_pearl_miners.sh` stops and disables that
-service.
+Pools are defined in `configs/profiles.env`; miner installation properties are
+defined independently in `configs/miners.env`. `switch_profile.sh` validates the
+declared pool/miner combination and constructs the correct argv for that miner
+type. All supported combinations run through `pearl-miner.service`.
 
 For profiles that use GOST, `start_pearl_miners.sh` checks `gost-client.service` and
 the local pool endpoint before starting the miner. If the client tunnel is
@@ -322,7 +338,9 @@ ps -fp $(pidof wildrig-multi)
 ps -fp $(pidof miner)
 ps -fp $(pidof peakminer)
 ps -fp $(pidof SRBMiner-MULTI)
+ps -fp $(pidof pearl-gpu-miner)
 sudo cat /etc/gost-thread/miner.env
+sudo cat /etc/gost-thread/miners.env
 sudo cat /etc/gost-thread/profiles.env
 ```
 
@@ -436,12 +454,8 @@ Client:
 
 ```bash
 ./scripts/start_client.sh
-./scripts/start_client.sh luckypool
-./scripts/start_client.sh alphapool
-./scripts/start_client.sh pearlhash
-./scripts/start_client.sh pearlfortune
-./scripts/start_client.sh herominers
-./scripts/start_client.sh kryptex
+./scripts/start_client.sh --pool luckypool --miner lpminer
+./scripts/start_client.sh --pool pearlhash --miner wildrig
 ./scripts/stop_client.sh
 ```
 
@@ -449,12 +463,12 @@ Pearl Miners:
 
 ```bash
 ./scripts/start_pearl_miners.sh
-./scripts/start_pearl_miners.sh luckypool
-./scripts/start_pearl_miners.sh alphapool
-./scripts/start_pearl_miners.sh pearlhash
-./scripts/start_pearl_miners.sh pearlfortune
-./scripts/start_pearl_miners.sh herominers
-./scripts/start_pearl_miners.sh kryptex
+./scripts/start_pearl_miners.sh --pool luckypool --miner lpminer
+./scripts/start_pearl_miners.sh --pool alphapool --miner tw-pearl-miner
+./scripts/start_pearl_miners.sh --pool pearlhash --miner wildrig
+./scripts/start_pearl_miners.sh --pool pearlfortune --miner pearlfortune
+./scripts/start_pearl_miners.sh --pool herominers --miner peakminer
+./scripts/start_pearl_miners.sh --pool kryptex --miner srbminer
 ./scripts/stop_pearl_miners.sh
 ```
 

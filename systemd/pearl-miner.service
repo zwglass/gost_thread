@@ -8,7 +8,7 @@ Requires=gost-client.service
 Type=simple
 EnvironmentFile=/etc/gost-thread/miner.env
 ExecStartPre=/usr/local/lib/gost-thread/wait-for-pearl-miner-pool
-ExecStart=/bin/sh -c 'cd "${MINER_WORKDIR}" && if [ -n "${MINER_LD_LIBRARY_PATH:-}" ]; then export LD_LIBRARY_PATH="${MINER_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"; fi && exec "${MINER_BIN}" ${MINER_ARGS}'
+ExecStart=/usr/local/lib/gost-thread/run-pearl-miner
 Restart=always
 RestartSec=5
 LimitNOFILE=1048576

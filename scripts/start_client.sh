@@ -13,13 +13,8 @@ run_with_optional_sudo() {
   fi
 }
 
-if [[ "$#" -gt 1 ]]; then
-  echo "Usage: $0 [profile]"
-  exit 1
-fi
-
-if [[ "$#" -eq 1 ]]; then
-  run_with_optional_sudo "${ROOT_DIR}/scripts/switch_profile.sh" "$1"
+if [[ "$#" -gt 0 ]]; then
+  run_with_optional_sudo "${ROOT_DIR}/scripts/switch_profile.sh" "$@"
 fi
 
 run_with_optional_sudo "${SYSTEMCTL_BIN}" start gost-client.service
