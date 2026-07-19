@@ -151,11 +151,12 @@ Linux asset, verify its published SHA-256 digest when available, and update only
 when the release tag or asset changed. `lpminer` and `alpha-miner` remain pinned
 to their fixed URLs even when `--update` is supplied.
 
-The installer preserves existing `miners.env`, `profiles.env`, and `miner.env`
-files by default. Pass `--replace-config` to replace all three with the current
-repository templates. This resets pool, wallet, miner-selection, and other local
-configuration values; `PEARL_MINERS_DIR` is still adjusted to the selected
-installation directory.
+The installer preserves existing configuration files by default. Pass
+`--replace-config` to replace `miners.env` and `profiles.env` with the current
+repository templates. This resets pool, wallet, and miner installation settings;
+`PEARL_MINERS_DIR` is still adjusted to the selected installation directory.
+The runtime-generated `miner.env` is left untouched. When `--replace-config` is
+used, it is neither created nor overwritten from the static template.
 
 `tw-pearl-miner` defaults to its Linux CUDA 12 archive (`*.c12.tar.gz`) and
 never matches Windows, B300, HiveOS, or MMPOS assets. Systems with an NVIDIA

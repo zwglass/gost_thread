@@ -24,8 +24,9 @@ With no miner names, all configured miners are installed. Existing miners are
 left unchanged unless --update is supplied. --update applies only to miners
 managed through GitHub Releases; fixed-URL miners remain pinned.
 
-Existing miners.env, profiles.env, and miner.env files are preserved by
-default. Use --replace-config to replace them with the repository templates.
+Existing configuration files are preserved by default. Use --replace-config
+to replace miners.env and profiles.env with the repository templates. The
+runtime-generated miner.env is never replaced by this option.
 
 Examples:
   sudo $0
@@ -136,7 +137,9 @@ install_default_profiles_config() {
 install_default_runtime_config() {
   local tmp_file
 
-  if [[ -f "${MINER_RUNTIME_CONFIG}" && "${REPLACE_CONFIG}" != "1" ]]; then
+  # --replace-config only refreshes source configuration. miner.env is runtime
+  # state and must not be created or overwritten from the static template.
+  if [[ "${REPLACE_CONFIG}" == "1" || -f "${MINER_RUNTIME_CONFIG}" ]]; then
     return
   fi
   tmp_file="$(mktemp)"

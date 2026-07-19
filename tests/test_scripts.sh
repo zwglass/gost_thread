@@ -165,11 +165,21 @@ test_github_install_and_update() {
     "${ROOT_DIR}/scripts/install_pearl_miners.sh" --replace-config tw-pearl-miner >/dev/null
   grep -q "^PEARL_MINERS_DIR=${miners_dir}$" "${config_dir}/miners.env" || fail "miners.env was not replaced"
   grep -q '^DEFAULT_POOL=luckypool$' "${config_dir}/profiles.env" || fail "profiles.env was not replaced"
-  grep -q '^ACTIVE_POOL=luckypool$' "${config_dir}/miner.env" || fail "miner.env was not replaced"
-  if grep -Eq '^CUSTOM_(MINERS|PROFILES|RUNTIME)_CONFIG=' \
-    "${config_dir}/miners.env" "${config_dir}/profiles.env" "${config_dir}/miner.env"; then
-    fail "custom configuration survived --replace-config"
+  grep -q '^CUSTOM_RUNTIME_CONFIG=preserve$' "${config_dir}/miner.env" || fail "miner.env was unexpectedly replaced"
+  if grep -Eq '^CUSTOM_(MINERS|PROFILES)_CONFIG=' \
+    "${config_dir}/miners.env" "${config_dir}/profiles.env"; then
+    fail "custom source configuration survived --replace-config"
   fi
+
+  rm -f "${config_dir}/miner.env"
+  PEARL_MINERS_DIR="${miners_dir}" \
+    GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    GOST_THREAD_SYSTEMD_DIR="${systemd_dir}" \
+    GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
+    GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
+    GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --replace-config tw-pearl-miner >/dev/null
+  [[ ! -e "${config_dir}/miner.env" ]] || fail "--replace-config copied the static miner.env template"
 
   output="$(PEARL_MINERS_DIR="${miners_dir}" \
     GOST_THREAD_CONFIG_DIR="${config_dir}" \
