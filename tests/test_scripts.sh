@@ -138,8 +138,38 @@ test_github_install_and_update() {
     "${ROOT_DIR}/scripts/install_pearl_miners.sh" tw-pearl-miner >/dev/null
 
   [[ -x "${miners_dir}/tw-pearl-miner/pearl-gpu-miner" ]] || fail "GitHub miner was not installed"
+  [[ -f "${config_dir}/profiles.env" ]] || fail "profiles.env was not installed"
   output="$("${miners_dir}/tw-pearl-miner/pearl-gpu-miner")"
   assert_equals "version-one" "${output}" "initial GitHub install"
+
+  printf '%s\n' 'CUSTOM_MINERS_CONFIG=preserve' >>"${config_dir}/miners.env"
+  printf '%s\n' 'CUSTOM_PROFILES_CONFIG=preserve' >>"${config_dir}/profiles.env"
+  printf '%s\n' 'CUSTOM_RUNTIME_CONFIG=preserve' >>"${config_dir}/miner.env"
+  PEARL_MINERS_DIR="${miners_dir}" \
+    GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    GOST_THREAD_SYSTEMD_DIR="${systemd_dir}" \
+    GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
+    GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
+    GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" tw-pearl-miner >/dev/null
+  grep -q '^CUSTOM_MINERS_CONFIG=preserve$' "${config_dir}/miners.env" || fail "miners.env was unexpectedly replaced"
+  grep -q '^CUSTOM_PROFILES_CONFIG=preserve$' "${config_dir}/profiles.env" || fail "profiles.env was unexpectedly replaced"
+  grep -q '^CUSTOM_RUNTIME_CONFIG=preserve$' "${config_dir}/miner.env" || fail "miner.env was unexpectedly replaced"
+
+  PEARL_MINERS_DIR="${miners_dir}" \
+    GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    GOST_THREAD_SYSTEMD_DIR="${systemd_dir}" \
+    GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
+    GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
+    GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --replace-config tw-pearl-miner >/dev/null
+  grep -q "^PEARL_MINERS_DIR=${miners_dir}$" "${config_dir}/miners.env" || fail "miners.env was not replaced"
+  grep -q '^DEFAULT_POOL=luckypool$' "${config_dir}/profiles.env" || fail "profiles.env was not replaced"
+  grep -q '^ACTIVE_POOL=luckypool$' "${config_dir}/miner.env" || fail "miner.env was not replaced"
+  if grep -Eq '^CUSTOM_(MINERS|PROFILES|RUNTIME)_CONFIG=' \
+    "${config_dir}/miners.env" "${config_dir}/profiles.env" "${config_dir}/miner.env"; then
+    fail "custom configuration survived --replace-config"
+  fi
 
   output="$(PEARL_MINERS_DIR="${miners_dir}" \
     GOST_THREAD_CONFIG_DIR="${config_dir}" \

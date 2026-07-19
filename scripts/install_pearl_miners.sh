@@ -8,31 +8,37 @@ LIBEXEC_DIR="${GOST_THREAD_LIBEXEC_DIR:-/usr/local/lib/gost-thread}"
 SYSTEMCTL_BIN="${GOST_THREAD_SYSTEMCTL:-systemctl}"
 MINERS_CONFIG="${CONFIG_DIR}/miners.env"
 MINER_RUNTIME_CONFIG="${CONFIG_DIR}/miner.env"
+PROFILES_CONFIG="${CONFIG_DIR}/profiles.env"
 GITHUB_API_BASE="${GOST_THREAD_GITHUB_API_BASE:-https://api.github.com}"
 UPDATE_GITHUB=0
 INSTALL_ALL=0
+REPLACE_CONFIG=0
 SELECTED_MINERS=()
 UPDATED_MINERS=()
 
 usage() {
   cat <<EOF
-Usage: sudo $0 [--all] [--update] [miner ...]
+Usage: sudo $0 [--all] [--update] [--replace-config] [miner ...]
 
 With no miner names, all configured miners are installed. Existing miners are
 left unchanged unless --update is supplied. --update applies only to miners
 managed through GitHub Releases; fixed-URL miners remain pinned.
+
+Existing miners.env, profiles.env, and miner.env files are preserved by
+default. Use --replace-config to replace them with the repository templates.
 
 Examples:
   sudo $0
   sudo $0 tw-pearl-miner
   sudo $0 --update wildrig tw-pearl-miner
   sudo $0 --all --update
+  sudo $0 --replace-config --all
 EOF
 }
 
 require_root() {
   if [[ "${EUID}" -ne 0 && "${CONFIG_DIR}" == "/etc/gost-thread" ]]; then
-    echo "Please run as root: sudo $0 [--all] [--update] [miner ...]"
+    echo "Please run as root: sudo $0 [--all] [--update] [--replace-config] [miner ...]"
     exit 1
   fi
 }
@@ -55,6 +61,10 @@ parse_args() {
         ;;
       --update)
         UPDATE_GITHUB=1
+        shift
+        ;;
+      --replace-config | --replace-configs)
+        REPLACE_CONFIG=1
         shift
         ;;
       -h | --help)
@@ -98,7 +108,7 @@ install_default_config() {
   local tmp_file
 
   install -d -m 0755 "${CONFIG_DIR}"
-  if [[ -f "${MINERS_CONFIG}" ]]; then
+  if [[ -f "${MINERS_CONFIG}" && "${REPLACE_CONFIG}" != "1" ]]; then
     return
   fi
 
@@ -115,10 +125,18 @@ install_default_config() {
   rm -f "${tmp_file}"
 }
 
+install_default_profiles_config() {
+  if [[ -f "${PROFILES_CONFIG}" && "${REPLACE_CONFIG}" != "1" ]]; then
+    return
+  fi
+
+  install -m 0644 "${ROOT_DIR}/configs/profiles.env" "${PROFILES_CONFIG}"
+}
+
 install_default_runtime_config() {
   local tmp_file
 
-  if [[ -f "${MINER_RUNTIME_CONFIG}" ]]; then
+  if [[ -f "${MINER_RUNTIME_CONFIG}" && "${REPLACE_CONFIG}" != "1" ]]; then
     return
   fi
   tmp_file="$(mktemp)"
@@ -581,6 +599,7 @@ main() {
   require_root
   require_command curl
   install_default_config
+  install_default_profiles_config
 
   # shellcheck source=/dev/null
   . "${MINERS_CONFIG}"
@@ -603,7 +622,7 @@ main() {
   fi
 
   echo "Miner installation completed."
-  echo "Installed configuration: ${MINERS_CONFIG}"
+  echo "Installed configuration: ${MINERS_CONFIG}, ${PROFILES_CONFIG}, ${MINER_RUNTIME_CONFIG}"
   echo "Select a pool/miner explicitly:"
   echo "  sudo ./scripts/start_pearl_miners.sh --pool luckypool --miner lpminer"
   echo "  sudo ./scripts/start_pearl_miners.sh --pool luckypool --miner tw-pearl-miner"

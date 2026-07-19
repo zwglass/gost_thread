@@ -142,6 +142,7 @@ Install one miner or update GitHub-managed miners explicitly:
 sudo ./scripts/install_pearl_miners.sh tw-pearl-miner
 sudo ./scripts/install_pearl_miners.sh --update wildrig tw-pearl-miner
 sudo ./scripts/install_pearl_miners.sh --all --update
+sudo ./scripts/install_pearl_miners.sh --replace-config --all
 ```
 
 Without `--update`, an existing executable is left unchanged. With `--update`,
@@ -149,6 +150,12 @@ GitHub miners query the latest stable Release, select exactly one configured
 Linux asset, verify its published SHA-256 digest when available, and update only
 when the release tag or asset changed. `lpminer` and `alpha-miner` remain pinned
 to their fixed URLs even when `--update` is supplied.
+
+The installer preserves existing `miners.env`, `profiles.env`, and `miner.env`
+files by default. Pass `--replace-config` to replace all three with the current
+repository templates. This resets pool, wallet, miner-selection, and other local
+configuration values; `PEARL_MINERS_DIR` is still adjusted to the selected
+installation directory.
 
 `tw-pearl-miner` defaults to its Linux CUDA 12 archive (`*.c12.tar.gz`) and
 never matches Windows, B300, HiveOS, or MMPOS assets. Systems with an NVIDIA
