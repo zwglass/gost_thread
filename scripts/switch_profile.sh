@@ -121,14 +121,45 @@ require_value() {
 read_env_value() {
   local file="$1"
   local key="$2"
+  local value
 
-  sed -n "s/^${key}=//p" "${file}" | tail -n 1
+  value="$(sed -n "s/^${key}=//p" "${file}" | tail -n 1)"
+  unquote_env_value "${value}"
 }
 
 quote_env_value() {
   local value="$1"
 
   printf "'%s'" "${value//\'/\'\\\'\'}"
+}
+
+unquote_env_value() {
+  local value="$1"
+  local escaped_quote="'\\''"
+  local inner
+  local prefix
+  local decoded
+
+  # Values written by quote_env_value are shell-style single-quoted strings.
+  # Decode every valid layer so configurations affected by the old repeated
+  # quoting bug are repaired the next time a profile is selected.
+  while [[ "${value}" == \'*\' && ${#value} -ge 2 ]]; do
+    inner="${value:1:${#value}-2}"
+    decoded=""
+    while [[ "${inner}" == *"${escaped_quote}"* ]]; do
+      prefix="${inner%%"${escaped_quote}"*}"
+      decoded+="${prefix}'"
+      inner="${inner#*"${escaped_quote}"}"
+    done
+    decoded+="${inner}"
+
+    if [[ "$(quote_env_value "${decoded}")" != "${value}" ]]; then
+      break
+    fi
+    value="${decoded}"
+  done
+
+  printf "%s" "${value}"
 }
 
 list_pools() {

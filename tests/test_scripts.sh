@@ -51,6 +51,7 @@ test_switch_profile_and_runner() {
   local selection
   local pool
   local miner
+  local client_config
 
   mkdir -p "${config_dir}"
   cp "${ROOT_DIR}/configs/profiles.env" "${ROOT_DIR}/configs/miners.env" "${ROOT_DIR}/configs/client.env" "${config_dir}/"
@@ -58,6 +59,13 @@ test_switch_profile_and_runner() {
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" \
     --pool alphapool --miner tw-pearl-miner --miner-arg=--no-tui >/dev/null
+
+  client_config="$(<"${config_dir}/client.env")"
+  GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" \
+    --pool alphapool --miner tw-pearl-miner --miner-arg=--no-tui >/dev/null
+  assert_equals "${client_config}" "$(<"${config_dir}/client.env")" \
+    "client config after repeated profile switch"
 
   # shellcheck source=/dev/null
   . "${config_dir}/miner.env"
