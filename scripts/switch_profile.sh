@@ -124,42 +124,19 @@ read_env_value() {
   local value
 
   value="$(sed -n "s/^${key}=//p" "${file}" | tail -n 1)"
-  unquote_env_value "${value}"
+  # These client settings never legitimately contain shell quoting characters.
+  # Removing them directly also repairs configs polluted by repeated quoting in
+  # linear time, regardless of how many escaped quote sequences accumulated.
+  value="${value//\\/}"
+  value="${value//\'/}"
+  value="${value//\"/}"
+  printf "%s" "${value}"
 }
 
 quote_env_value() {
   local value="$1"
 
   printf "'%s'" "${value//\'/\'\\\'\'}"
-}
-
-unquote_env_value() {
-  local value="$1"
-  local escaped_quote="'\\''"
-  local inner
-  local prefix
-  local decoded
-
-  # Values written by quote_env_value are shell-style single-quoted strings.
-  # Decode every valid layer so configurations affected by the old repeated
-  # quoting bug are repaired the next time a profile is selected.
-  while [[ "${value}" == \'*\' && ${#value} -ge 2 ]]; do
-    inner="${value:1:${#value}-2}"
-    decoded=""
-    while [[ "${inner}" == *"${escaped_quote}"* ]]; do
-      prefix="${inner%%"${escaped_quote}"*}"
-      decoded+="${prefix}'"
-      inner="${inner#*"${escaped_quote}"}"
-    done
-    decoded+="${inner}"
-
-    if [[ "$(quote_env_value "${decoded}")" != "${value}" ]]; then
-      break
-    fi
-    value="${decoded}"
-  done
-
-  printf "%s" "${value}"
 }
 
 list_pools() {
