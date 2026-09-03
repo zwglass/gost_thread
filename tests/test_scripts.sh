@@ -98,8 +98,11 @@ test_switch_profile_and_runner() {
   . "${config_dir}/miner.env"
   # shellcheck source=/dev/null
   . "${config_dir}/profiles.env"
-  assert_equals "stratum+ssl://127.0.0.1:3333" "${MINER_ARG_1}" "Krig Miner TLS URL"
+  assert_equals "stratum+ssl://prl.kryptex.network:8048" "${MINER_ARG_1}" "Krig Miner TLS URL"
   assert_equals "${WALLET_ADDRESS}/rtx3090" "${MINER_ARG_3}" "Krig Miner wallet and worker"
+  # shellcheck source=/dev/null
+  . "${config_dir}/client.env"
+  assert_equals "tcp://127.0.0.1:8048/prl.kryptex.network:8048" "${LOCAL_FORWARD}" "Krig Miner local GOST forward"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" \

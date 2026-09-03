@@ -174,9 +174,11 @@ build_miner_args() {
   local miner="$1"
   local pool="$2"
   local local_address="$3"
-  local wallet="$4"
-  local worker="$5"
-  local password="$6"
+  local target_host="$4"
+  local target_port="$5"
+  local wallet="$6"
+  local worker="$7"
+  local password="$8"
   local stratum_pool="stratum+tcp://${local_address}"
 
   MINER_ARGS=()
@@ -218,7 +220,10 @@ build_miner_args() {
       append_option --password "${password}"
       ;;
     krig-miner)
-      append_option --url "stratum+ssl://${local_address}"
+      # KRig validates the pool hostname and rejects a loopback URL. The
+      # matching GOST listener is selected below; the host must remain the
+      # official Kryptex endpoint so KRig accepts it and keeps its TLS SNI.
+      append_option --url "stratum+ssl://${target_host}:${target_port}"
       append_option --user "${wallet}/${worker}"
       append_option --password "${password}"
       ;;
@@ -391,6 +396,14 @@ main() {
     target_port="${miner_target_port}"
   fi
 
+  # KRig only accepts Kryptex's official TLS endpoint in --url. Bind GOST to
+  # that endpoint's local port so a host-level DNS/NAT redirect can send the
+  # official hostname to this listener without exposing the old :3333 URL to
+  # the miner. Other miner profiles retain the shared LOCAL_LISTEN setting.
+  if [[ "${MINER}" == "krig-miner" ]]; then
+    local_listen="tcp://127.0.0.1:${target_port}"
+  fi
+
   if [[ "${RESTART_SERVICES}" == "1" ]] && "${SYSTEMCTL_BIN}" cat pearl-miner.service >/dev/null 2>&1 && [[ ! -x "${miner_bin}" ]]; then
     echo "Miner binary is not installed or is not executable: ${miner_bin}"
     echo "Install it first: sudo ./scripts/install_pearl_miners.sh ${MINER}"
@@ -403,7 +416,7 @@ main() {
     exit 1
   fi
 
-  build_miner_args "${MINER}" "${POOL}" "${local_address}" "${wallet}" "${worker}" "${password}"
+  build_miner_args "${MINER}" "${POOL}" "${local_address}" "${target_host}" "${target_port}" "${wallet}" "${worker}" "${password}"
   write_runtime_configs "${target_host}" "${target_port}" "${miner_bin}" "${miner_workdir}" "${miner_ld_library_path}" "${local_listen}"
 
   restart_if_installed gost-client.service
