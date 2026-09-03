@@ -46,6 +46,7 @@ write_release_json() {
 
 test_switch_profile_and_runner() {
   local config_dir="${TEST_ROOT}/switch-config"
+  local recovery_config_dir="${TEST_ROOT}/krig-recovery-config"
   local fake_miner="${TEST_ROOT}/fake-miner"
   local output
   local selection
@@ -103,6 +104,17 @@ test_switch_profile_and_runner() {
   # shellcheck source=/dev/null
   . "${config_dir}/client.env"
   assert_equals "tcp://127.0.0.1:8048/prl.kryptex.network:8048" "${LOCAL_FORWARD}" "Krig Miner local GOST forward"
+
+  mkdir -p "${recovery_config_dir}"
+  cp "${ROOT_DIR}/configs/profiles.env" "${ROOT_DIR}/configs/miners.env" "${ROOT_DIR}/configs/client.env" "${recovery_config_dir}/"
+  sed '/^KRYPTEX_KRIG_MINER_TARGET_\(HOST\|PORT\)=/d' "${recovery_config_dir}/profiles.env" >"${recovery_config_dir}/profiles.env.tmp"
+  mv "${recovery_config_dir}/profiles.env.tmp" "${recovery_config_dir}/profiles.env"
+  GOST_THREAD_CONFIG_DIR="${recovery_config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool kryptex --miner krig-miner >/dev/null
+  grep -q '^KRYPTEX_KRIG_MINER_TARGET_HOST=prl.kryptex.network$' "${recovery_config_dir}/profiles.env" || \
+    fail "missing KRig target host was not restored"
+  grep -q '^KRYPTEX_KRIG_MINER_TARGET_PORT=8048$' "${recovery_config_dir}/profiles.env" || \
+    fail "missing KRig target port was not restored"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" \

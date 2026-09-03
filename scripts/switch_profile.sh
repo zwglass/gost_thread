@@ -2,12 +2,22 @@
 set -euo pipefail
 
 CONFIG_DIR="${GOST_THREAD_CONFIG_DIR:-/etc/gost-thread}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILES_FILE="${CONFIG_DIR}/profiles.env"
 MINERS_FILE="${CONFIG_DIR}/miners.env"
 CLIENT_FILE="${CONFIG_DIR}/client.env"
 MINER_FILE="${CONFIG_DIR}/miner.env"
 RESTART_SERVICES="${GOST_THREAD_RESTART_SERVICES:-1}"
 SYSTEMCTL_BIN="${GOST_THREAD_SYSTEMCTL:-systemctl}"
+KRIG_REDIRECT_SCRIPT="${GOST_THREAD_KRIG_REDIRECT_SCRIPT:-${ROOT_DIR}/scripts/krig_gost_redirect.sh}"
+KRIG_REDIRECT_FALLBACK="${GOST_THREAD_KRIG_REDIRECT_FALLBACK:-/usr/local/lib/gost-thread/krig-gost-redirect}"
+if [[ -v GOST_THREAD_MANAGE_KRIG_REDIRECT ]]; then
+  MANAGE_KRIG_REDIRECT="${GOST_THREAD_MANAGE_KRIG_REDIRECT}"
+elif [[ "${CONFIG_DIR}" == "/etc/gost-thread" ]]; then
+  MANAGE_KRIG_REDIRECT=1
+else
+  MANAGE_KRIG_REDIRECT=0
+fi
 POOL=""
 MINER=""
 EXTRA_MINER_ARGS=()
@@ -115,6 +125,74 @@ require_value() {
   if [[ -z "${value}" ]]; then
     echo "Missing ${label}."
     exit 1
+  fi
+}
+
+restore_missing_config() {
+  local destination="$1"
+  local template="$2"
+
+  if [[ -f "${destination}" ]]; then
+    return
+  fi
+  if [[ ! -f "${template}" ]]; then
+    echo "Missing config and template: ${destination}, ${template}" >&2
+    exit 1
+  fi
+  install -d -m 0755 "${CONFIG_DIR}"
+  install -m 0644 "${template}" "${destination}"
+  echo "Restored missing config: ${destination}"
+}
+
+restore_missing_profile_value() {
+  local key="$1"
+  local template="${ROOT_DIR}/configs/profiles.env"
+  local value
+
+  if [[ -n "$(read_env_value "${PROFILES_FILE}" "${key}")" ]]; then
+    return
+  fi
+  value="$(read_env_value "${template}" "${key}")"
+  if [[ -z "${value}" ]]; then
+    echo "Missing required profile setting and template value: ${key}" >&2
+    exit 1
+  fi
+  printf '\n%s=%s\n' "${key}" "${value}" >>"${PROFILES_FILE}"
+  echo "Restored missing profile setting: ${key}"
+}
+
+ensure_krig_redirect_script() {
+  if [[ -x "${KRIG_REDIRECT_SCRIPT}" ]]; then
+    return
+  fi
+  if [[ -x "${KRIG_REDIRECT_FALLBACK}" ]]; then
+    install -d -m 0755 "$(dirname "${KRIG_REDIRECT_SCRIPT}")"
+    install -m 0755 "${KRIG_REDIRECT_FALLBACK}" "${KRIG_REDIRECT_SCRIPT}"
+    echo "Restored KRig redirect script: ${KRIG_REDIRECT_SCRIPT}"
+    return
+  fi
+  echo "KRig redirect script is missing: ${KRIG_REDIRECT_SCRIPT}" >&2
+  echo "Run ./scripts/install_pearl_miners.sh krig-miner to install its fallback copy." >&2
+  exit 1
+}
+
+manage_krig_redirect() {
+  local action="$1"
+  local target_host="${2:-}"
+  local target_port="${3:-}"
+
+  if [[ "${MANAGE_KRIG_REDIRECT}" != "1" ]]; then
+    return 0
+  fi
+  ensure_krig_redirect_script
+
+  if [[ "${action}" == "enable" ]]; then
+    KRIG_GOST_POOL_HOST="${target_host}" \
+      KRIG_GOST_POOL_PORT="${target_port}" \
+      KRIG_GOST_LOCAL_PORT="${target_port}" \
+      "${KRIG_REDIRECT_SCRIPT}" enable
+  else
+    "${KRIG_REDIRECT_SCRIPT}" disable
   fi
 }
 
@@ -329,12 +407,13 @@ main() {
   parse_args "$@"
   require_root
 
-  for file in "${PROFILES_FILE}" "${MINERS_FILE}" "${CLIENT_FILE}"; do
-    if [[ ! -f "${file}" ]]; then
-      echo "Missing config: ${file}"
-      exit 1
-    fi
-  done
+  restore_missing_config "${PROFILES_FILE}" "${ROOT_DIR}/configs/profiles.env"
+  restore_missing_config "${MINERS_FILE}" "${ROOT_DIR}/configs/miners.env"
+  if [[ ! -f "${CLIENT_FILE}" ]]; then
+    echo "Missing client config: ${CLIENT_FILE}" >&2
+    echo "It contains relay credentials and will not be recreated automatically." >&2
+    exit 1
+  fi
 
   # shellcheck source=/dev/null
   . "${PROFILES_FILE}"
@@ -389,6 +468,16 @@ main() {
   require_value "${miner_prefix}_BIN in ${MINERS_FILE}" "${miner_bin}"
   require_value "${miner_prefix}_WORKDIR in ${MINERS_FILE}" "${miner_workdir}"
 
+  if [[ "${MINER}" == "krig-miner" ]]; then
+    restore_missing_profile_value "KRYPTEX_KRIG_MINER_TARGET_HOST"
+    restore_missing_profile_value "KRYPTEX_KRIG_MINER_TARGET_PORT"
+    # Reload the restored values before applying the miner-specific endpoint.
+    # shellcheck source=/dev/null
+    . "${PROFILES_FILE}"
+    miner_target_host="$(config_value "${pool_prefix}_${miner_prefix}" TARGET_HOST)"
+    miner_target_port="$(config_value "${pool_prefix}_${miner_prefix}" TARGET_PORT)"
+  fi
+
   if [[ -n "${miner_target_host}" || -n "${miner_target_port}" ]]; then
     require_value "${pool_prefix}_${miner_prefix}_TARGET_HOST in ${PROFILES_FILE}" "${miner_target_host}"
     require_value "${pool_prefix}_${miner_prefix}_TARGET_PORT in ${PROFILES_FILE}" "${miner_target_port}"
@@ -418,6 +507,12 @@ main() {
 
   build_miner_args "${MINER}" "${POOL}" "${local_address}" "${target_host}" "${target_port}" "${wallet}" "${worker}" "${password}"
   write_runtime_configs "${target_host}" "${target_port}" "${miner_bin}" "${miner_workdir}" "${miner_ld_library_path}" "${local_listen}"
+
+  if [[ "${MINER}" == "krig-miner" ]]; then
+    manage_krig_redirect enable "${target_host}" "${target_port}"
+  else
+    manage_krig_redirect disable
+  fi
 
   restart_if_installed gost-client.service
   restart_if_installed pearl-miner.service

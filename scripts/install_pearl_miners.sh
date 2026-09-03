@@ -564,6 +564,7 @@ install_services() {
   install -d -m 0755 "${SYSTEMD_DIR}"
   install -m 0755 "${ROOT_DIR}/scripts/wait_for_pearl_miner_pool.sh" "${LIBEXEC_DIR}/wait-for-pearl-miner-pool"
   install -m 0755 "${ROOT_DIR}/scripts/run_pearl_miner.sh" "${LIBEXEC_DIR}/run-pearl-miner"
+  install -m 0755 "${ROOT_DIR}/scripts/krig_gost_redirect.sh" "${LIBEXEC_DIR}/krig-gost-redirect"
   install -m 0644 "${ROOT_DIR}/systemd/pearl-miner.service" "${SYSTEMD_DIR}/pearl-miner.service"
 
   if command -v "${SYSTEMCTL_BIN}" >/dev/null 2>&1; then
