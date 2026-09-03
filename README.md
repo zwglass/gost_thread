@@ -123,18 +123,19 @@ sudo ./scripts/install_pearl_miners.sh
 ```
 
 The installer supports `lpminer`, `alpha-miner`, WildRig Multi, Pearl Fortune,
-PeakMiner, SRBMiner-Multi, Krig Miner, and `tw-pearl-miner`. It installs local binaries
-under `~/programs/pearl_miners/` by default:
+PeakMiner, SRBMiner-Multi, Krig Miner, and `tw-pearl-miner`. On a fresh
+installation it derives an absolute directory from the project location and
+installs local binaries under `<project-directory>/miners/` by default:
 
 ```text
-~/programs/pearl_miners/lpminer/lpminer
-~/programs/pearl_miners/alpha_miner/alpha-miner
-~/programs/pearl_miners/wildrig/wildrig-multi
-~/programs/pearl_miners/pearlfortune/miner-cuda13
-~/programs/pearl_miners/peakminer/peakminer
-~/programs/pearl_miners/srbminer/SRBMiner-MULTI
-~/programs/pearl_miners/krig-miner/krig-miner
-~/programs/pearl_miners/tw-pearl-miner/pearl-gpu-miner
+<project-directory>/miners/lpminer/lpminer
+<project-directory>/miners/alpha_miner/alpha-miner
+<project-directory>/miners/wildrig/wildrig-multi
+<project-directory>/miners/pearlfortune/miner-cuda13
+<project-directory>/miners/peakminer/peakminer
+<project-directory>/miners/srbminer/SRBMiner-MULTI
+<project-directory>/miners/krig-miner/krig-miner
+<project-directory>/miners/tw-pearl-miner/pearl-gpu-miner
 ```
 
 Install one miner or update GitHub-managed miners explicitly:
@@ -152,6 +153,9 @@ GitHub miners query the latest stable Release, select exactly one configured
 Linux asset, verify its published SHA-256 digest when available, and update only
 when the release tag or asset changed. `lpminer` and `alpha-miner` remain pinned
 to their fixed URLs even when `--update` is supplied.
+
+Set an absolute `PEARL_MINERS_DIR` only when you intentionally want a different
+location; it remains supported for existing deployments and custom layouts.
 
 The installer preserves existing configuration files by default. Pass
 `--replace-config` to replace `miners.env` and `profiles.env` with the current
@@ -267,8 +271,12 @@ The resulting path is:
 peakminer -> 127.0.0.1:3333 -> gost-client.service -> de.pearl.herominers.com:1200
 ```
 
-The `kryptex` profile uses SRBMiner-Multi from
-https://github.com/doktor83/SRBMiner-Multi. Kryptex lists Pearl as the
+The `kryptex` profile uses SRBMiner-Multi by default, and also supports
+[Krig Miner](https://github.com/kryptex/krig-miner). Krig Miner requires a
+TLS-only pool connection, so its selection uses Kryptex's TLS endpoint while
+the other miners continue to use the existing non-SSL endpoint.
+[SRBMiner-Multi](https://github.com/doktor83/SRBMiner-Multi) is the default;
+Kryptex lists Pearl as the
 `PearlHash` algorithm and the Global non-SSL endpoint as:
 
 ```text

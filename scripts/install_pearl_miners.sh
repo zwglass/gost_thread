@@ -95,13 +95,9 @@ detect_base_dir() {
     printf "%s" "${PEARL_MINERS_DIR}"
     return
   fi
-  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
-    local sudo_home
-    sudo_home="$(getent passwd "${SUDO_USER}" 2>/dev/null | cut -d: -f6 || true)"
-    printf "%s" "${sudo_home:-/home/${SUDO_USER}}/programs/pearl_miners"
-    return
-  fi
-  printf "%s" "${HOME}/programs/pearl_miners"
+  # ROOT_DIR is resolved from this script, so this remains stable when invoked
+  # through sudo or systemd and does not depend on the caller's home directory.
+  printf "%s/miners" "${ROOT_DIR}"
 }
 
 install_default_config() {

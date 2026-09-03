@@ -85,11 +85,21 @@ test_switch_profile_and_runner() {
     "pearlhash wildrig" \
     "pearlfortune pearlfortune" \
     "herominers peakminer" \
-    "kryptex srbminer"; do
+    "kryptex srbminer" \
+    "kryptex krig-miner"; do
     read -r pool miner <<<"${selection}"
     GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
       "${ROOT_DIR}/scripts/switch_profile.sh" --pool "${pool}" --miner "${miner}" >/dev/null
   done
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool kryptex --miner krig-miner >/dev/null
+  # shellcheck source=/dev/null
+  . "${config_dir}/miner.env"
+  # shellcheck source=/dev/null
+  . "${config_dir}/profiles.env"
+  assert_equals "stratum+ssl://127.0.0.1:3333" "${MINER_ARG_1}" "Krig Miner TLS URL"
+  assert_equals "${WALLET_ADDRESS}/rtx3090" "${MINER_ARG_3}" "Krig Miner wallet and worker"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" \

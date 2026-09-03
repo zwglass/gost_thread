@@ -217,6 +217,11 @@ build_miner_args() {
       append_option --wallet "${wallet}.${worker}"
       append_option --password "${password}"
       ;;
+    krig-miner)
+      append_option --url "stratum+ssl://${local_address}"
+      append_option --user "${wallet}/${worker}"
+      append_option --password "${password}"
+      ;;
     tw-pearl-miner)
       append_option --pool "${local_address}"
       append_option --wallet "${wallet}"
@@ -313,6 +318,8 @@ main() {
   local miner_bin
   local miner_workdir
   local miner_ld_library_path
+  local miner_target_host
+  local miner_target_port
 
   parse_args "$@"
   require_root
@@ -363,6 +370,8 @@ main() {
   miner_bin="$(config_value "${miner_prefix}" BIN)"
   miner_workdir="$(config_value "${miner_prefix}" WORKDIR)"
   miner_ld_library_path="$(config_value "${miner_prefix}" LD_LIBRARY_PATH)"
+  miner_target_host="$(config_value "${pool_prefix}_${miner_prefix}" TARGET_HOST)"
+  miner_target_port="$(config_value "${pool_prefix}_${miner_prefix}" TARGET_PORT)"
   local_listen="${LOCAL_LISTEN:-}"
   worker="${WORKER_NAME:-}"
   wallet="${wallet:-${WALLET_ADDRESS:-}}"
@@ -374,6 +383,13 @@ main() {
   require_value "wallet for ${POOL}" "${wallet}"
   require_value "${miner_prefix}_BIN in ${MINERS_FILE}" "${miner_bin}"
   require_value "${miner_prefix}_WORKDIR in ${MINERS_FILE}" "${miner_workdir}"
+
+  if [[ -n "${miner_target_host}" || -n "${miner_target_port}" ]]; then
+    require_value "${pool_prefix}_${miner_prefix}_TARGET_HOST in ${PROFILES_FILE}" "${miner_target_host}"
+    require_value "${pool_prefix}_${miner_prefix}_TARGET_PORT in ${PROFILES_FILE}" "${miner_target_port}"
+    target_host="${miner_target_host}"
+    target_port="${miner_target_port}"
+  fi
 
   if [[ "${RESTART_SERVICES}" == "1" ]] && "${SYSTEMCTL_BIN}" cat pearl-miner.service >/dev/null 2>&1 && [[ ! -x "${miner_bin}" ]]; then
     echo "Miner binary is not installed or is not executable: ${miner_bin}"
