@@ -275,6 +275,19 @@ The `kryptex` profile uses SRBMiner-Multi by default, and also supports
 [Krig Miner](https://github.com/kryptex/krig-miner). Krig Miner requires a
 TLS-only pool connection, so its selection uses Kryptex's TLS endpoint while
 the other miners continue to use the existing non-SSL endpoint.
+
+KRig validates the official pool address. After selecting `kryptex/krig-miner`,
+enable the host-level redirect that routes its official TLS connection through
+the local GOST listener:
+
+```bash
+sudo ./scripts/krig_gost_redirect.sh enable
+sudo ./scripts/krig_gost_redirect.sh status
+```
+
+This uses an iptables OUTPUT DNAT rule, not an `/etc/hosts` override; DNS must
+continue resolving `prl.kryptex.network` to its public address. Disable it with
+`sudo ./scripts/krig_gost_redirect.sh disable`.
 [SRBMiner-Multi](https://github.com/doktor83/SRBMiner-Multi) is the default;
 Kryptex lists Pearl as the
 `PearlHash` algorithm and the Global non-SSL endpoint as:

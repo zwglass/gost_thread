@@ -124,6 +124,13 @@ test_switch_profile_and_runner() {
     fail "runner did not preserve password as one argument"
 }
 
+test_krig_gost_redirect_help() {
+  local output
+
+  output="$("${ROOT_DIR}/scripts/krig_gost_redirect.sh" --help)"
+  [[ "${output}" == *"<enable|disable|status>"* ]] || fail "KRig redirect usage is missing commands"
+}
+
 test_github_install_and_update() {
   local config_dir="${TEST_ROOT}/install-config"
   local systemd_dir="${TEST_ROOT}/systemd"
@@ -278,5 +285,6 @@ require_command jq
 require_command curl
 require_command tar
 test_switch_profile_and_runner
+test_krig_gost_redirect_help
 test_github_install_and_update
 echo "All script tests passed."
