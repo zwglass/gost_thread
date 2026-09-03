@@ -123,7 +123,7 @@ sudo ./scripts/install_pearl_miners.sh
 ```
 
 The installer supports `lpminer`, `alpha-miner`, WildRig Multi, Pearl Fortune,
-PeakMiner, SRBMiner-Multi, and `tw-pearl-miner`. It installs local binaries
+PeakMiner, SRBMiner-Multi, Krig Miner, and `tw-pearl-miner`. It installs local binaries
 under `~/programs/pearl_miners/` by default:
 
 ```text
@@ -133,6 +133,7 @@ under `~/programs/pearl_miners/` by default:
 ~/programs/pearl_miners/pearlfortune/miner-cuda13
 ~/programs/pearl_miners/peakminer/peakminer
 ~/programs/pearl_miners/srbminer/SRBMiner-MULTI
+~/programs/pearl_miners/krig-miner/krig-miner
 ~/programs/pearl_miners/tw-pearl-miner/pearl-gpu-miner
 ```
 
@@ -140,6 +141,7 @@ Install one miner or update GitHub-managed miners explicitly:
 
 ```bash
 sudo ./scripts/install_pearl_miners.sh tw-pearl-miner
+sudo ./scripts/install_pearl_miners.sh krig-miner
 sudo ./scripts/install_pearl_miners.sh --update wildrig tw-pearl-miner
 sudo ./scripts/install_pearl_miners.sh --all --update
 sudo ./scripts/install_pearl_miners.sh --replace-config --all

@@ -117,6 +117,7 @@ test_github_install_and_update() {
   local libexec_dir="${TEST_ROOT}/libexec"
   local miners_dir="${TEST_ROOT}/miners"
   local api_dir="${TEST_ROOT}/api/repos/egg5233/tw-pearl-miner/releases"
+  local krig_api_dir="${TEST_ROOT}/api/repos/kryptex/krig-miner/releases"
   local bundle_dir="${TEST_ROOT}/bundle"
   local asset_dir="${TEST_ROOT}/assets"
   local fake_systemctl="${TEST_ROOT}/systemctl"
@@ -125,7 +126,7 @@ test_github_install_and_update() {
   local digest
   local output
 
-  mkdir -p "${config_dir}" "${systemd_dir}" "${libexec_dir}" "${api_dir}" "${bundle_dir}/package" "${asset_dir}"
+  mkdir -p "${config_dir}" "${systemd_dir}" "${libexec_dir}" "${api_dir}" "${krig_api_dir}" "${bundle_dir}/package" "${asset_dir}"
   printf '%s\n' '#!/usr/bin/env bash' '[[ "$1" == "daemon-reload" ]]' >"${fake_systemctl}"
   chmod +x "${fake_systemctl}"
 
@@ -149,6 +150,27 @@ test_github_install_and_update() {
   [[ -f "${config_dir}/profiles.env" ]] || fail "profiles.env was not installed"
   output="$("${miners_dir}/tw-pearl-miner/pearl-gpu-miner")"
   assert_equals "version-one" "${output}" "initial GitHub install"
+
+  asset_name="krig-miner-1.4.0-linux-x64.tar.gz"
+  asset_file="${asset_dir}/${asset_name}"
+  rm -rf "${bundle_dir}/package"
+  mkdir -p "${bundle_dir}/package"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo krig-version' >"${bundle_dir}/package/krig-miner"
+  chmod +x "${bundle_dir}/package/krig-miner"
+  tar -czf "${asset_file}" -C "${bundle_dir}" package
+  digest="$(sha256_file "${asset_file}")"
+  write_release_json "${krig_api_dir}/latest" v1.4.0 "${asset_name}" "file://${asset_file}" "${digest}"
+
+  PEARL_MINERS_DIR="${miners_dir}" \
+    GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    GOST_THREAD_SYSTEMD_DIR="${systemd_dir}" \
+    GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
+    GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
+    GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" krig-miner >/dev/null
+  [[ -x "${miners_dir}/krig-miner/krig-miner" ]] || fail "Krig Miner was not installed"
+  output="$("${miners_dir}/krig-miner/krig-miner")"
+  assert_equals "krig-version" "${output}" "Krig Miner install"
 
   printf '%s\n' 'CUSTOM_MINERS_CONFIG=preserve' >>"${config_dir}/miners.env"
   printf '%s\n' 'CUSTOM_PROFILES_CONFIG=preserve' >>"${config_dir}/profiles.env"
