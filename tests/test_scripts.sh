@@ -82,11 +82,16 @@ test_switch_profile_and_runner() {
 
   for selection in \
     "luckypool lpminer" \
+    "luckypool tw-pearl-miner" \
     "alphapool alpha-miner" \
     "pearlhash wildrig" \
     "pearlfortune pearlfortune" \
     "herominers peakminer" \
+    "herominers tw-pearl-miner" \
+    "pearlfortune tw-pearl-miner" \
     "kryptex srbminer" \
+    "kryptex peakminer" \
+    "kryptex tw-pearl-miner" \
     "kryptex krig-miner"; do
     read -r pool miner <<<"${selection}"
     GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
@@ -134,6 +139,46 @@ test_switch_profile_and_runner() {
   output="$("${ROOT_DIR}/scripts/run_pearl_miner.sh")"
   [[ "${output}" == *'<x;d=262144;mdl=mdl1pgsyjwlla6vaqfp428s2ltf78zhh3kkklx8rmvehxpa6dph8kghrskygxsh>'* ]] || \
     fail "runner did not preserve password as one argument"
+
+  # A configured command replaces the builder and preserves literal shell text.
+  cat >>"${config_dir}/profiles.env" <<'EOF'
+ALPHAPOOL_TW_PEARL_MINER_ARGS=(
+  --custom 'space ; $(must-not-run)'
+  --endpoint '{LOCAL_ADDRESS}/{TARGET_HOST}:{TARGET_PORT}'
+  ''
+)
+EOF
+  GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner tw-pearl-miner \
+    '--miner-arg={LOCAL_ADDRESS}' >/dev/null
+  . "${config_dir}/miner.env"
+  assert_equals 'space ; $(must-not-run)' "${MINER_ARG_1}" "literal custom argument"
+  assert_equals '127.0.0.1:3333/eu1.alphapool.tech:5566' "${MINER_ARG_3}" "runtime placeholders"
+  assert_equals '' "${MINER_ARG_4}" "empty argument"
+  assert_equals '{LOCAL_ADDRESS}' "${MINER_ARG_5}" "literal extra argument"
+  assert_equals 6 "${MINER_ARG_COUNT}" "configured command replaces defaults"
+
+  printf '\nALPHAPOOL_TW_PEARL_MINER_ARGS=()\n' >>"${config_dir}/profiles.env"
+  if GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner tw-pearl-miner >/dev/null 2>&1; then
+    fail "empty argument array was accepted"
+  fi
+  printf '\nunset ALPHAPOOL_TW_PEARL_MINER_ARGS\nALPHAPOOL_TW_PEARL_MINER_ARGS="--pool localhost"\n' >>"${config_dir}/profiles.env"
+  if GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner tw-pearl-miner >/dev/null 2>&1; then
+    fail "command string was accepted"
+  fi
+
+  cat >>"${config_dir}/profiles.env" <<'EOF'
+unset ALPHAPOOL_TW_PEARL_MINER_ARGS
+ALPHAPOOL_WALLET=legacy-wallet
+ALPHAPOOL_PASSWORD='legacy password;value'
+EOF
+  GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner tw-pearl-miner >/dev/null
+  . "${config_dir}/miner.env"
+  assert_equals legacy-wallet "${MINER_ARG_3}" "legacy wallet fallback"
+  assert_equals 'legacy password;value' "${MINER_ARG_7}" "legacy password fallback"
 }
 
 test_krig_gost_redirect_help() {

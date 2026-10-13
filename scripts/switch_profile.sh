@@ -249,6 +249,39 @@ append_option() {
 }
 
 build_miner_args() {
+  local key="$(config_prefix "$2")_$(config_prefix "$1")_ARGS"
+  local declaration
+  local argument
+  local local_address="$3"
+  local target_host="$4"
+  local target_port="$5"
+
+  if ! declaration="$(declare -p "${key}" 2>/dev/null)"; then
+    # Existing installed profiles keep working until their arrays are migrated.
+    require_value "wallet for $2" "$6"
+    build_legacy_miner_args "$@"
+    return
+  fi
+  if [[ "${declaration}" != "declare -a "* ]]; then
+    echo "${key} must be an indexed Bash argument array." >&2
+    exit 1
+  fi
+  local -n configured_args="${key}"
+  if [[ "${#configured_args[@]}" -eq 0 ]]; then
+    echo "${key} must contain at least one argument." >&2
+    exit 1
+  fi
+  MINER_ARGS=()
+  for argument in "${configured_args[@]}"; do
+    argument="${argument//\{LOCAL_ADDRESS\}/${local_address}}"
+    argument="${argument//\{TARGET_HOST\}/${target_host}}"
+    argument="${argument//\{TARGET_PORT\}/${target_port}}"
+    MINER_ARGS+=("${argument}")
+  done
+  MINER_ARGS+=("${EXTRA_MINER_ARGS[@]}")
+}
+
+build_legacy_miner_args() {
   local miner="$1"
   local pool="$2"
   local local_address="$3"
@@ -464,7 +497,6 @@ main() {
   require_value "${pool_prefix}_TARGET_PORT in ${PROFILES_FILE}" "${target_port}"
   require_value "LOCAL_LISTEN in ${PROFILES_FILE}" "${local_listen}"
   require_value "WORKER_NAME in ${PROFILES_FILE}" "${worker}"
-  require_value "wallet for ${POOL}" "${wallet}"
   require_value "${miner_prefix}_BIN in ${MINERS_FILE}" "${miner_bin}"
   require_value "${miner_prefix}_WORKDIR in ${MINERS_FILE}" "${miner_workdir}"
 

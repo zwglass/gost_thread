@@ -106,8 +106,8 @@ configs/profiles.env
 ```
 
 `miners.env` owns download sources, executable paths, and working directories.
-`profiles.env` owns pool endpoints, wallets, passwords, default miners, and the
-allowed pool/miner combinations. `miner.env` is generated runtime state and
+`profiles.env` owns pool endpoints, default miners, allowed pool/miner combinations,
+and independent Bash argument arrays for each combination. `miner.env` is generated runtime state and
 stores each command argument separately so spaces and punctuation are preserved.
 
 Default expected binary:
@@ -120,6 +120,9 @@ Install Pearl miners on the client machine:
 
 ```bash
 sudo ./scripts/install_pearl_miners.sh
+
+# 走系统代理安装更新
+sudo --preserve-env=http_proxy,https_proxy,all_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY ./scripts/install_pearl_miners.sh
 ```
 
 The installer supports `lpminer`, `alpha-miner`, WildRig Multi, Pearl Fortune,
@@ -146,6 +149,9 @@ sudo ./scripts/install_pearl_miners.sh krig-miner
 sudo ./scripts/install_pearl_miners.sh --update wildrig tw-pearl-miner
 sudo ./scripts/install_pearl_miners.sh --all --update
 sudo ./scripts/install_pearl_miners.sh --replace-config --all
+
+# 走系统代理安装更新
+sudo --preserve-env=http_proxy,https_proxy,all_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY ./scripts/install_pearl_miners.sh --all --update
 ```
 
 Without `--update`, an existing executable is left unchanged. With `--update`,
@@ -167,7 +173,7 @@ used, it is neither created nor overwritten from the static template.
 `tw-pearl-miner` defaults to its Linux CUDA 12 archive (`*.c12.tar.gz`) and
 never matches Windows, B300, HiveOS, or MMPOS assets. Systems with an NVIDIA
 driver suitable for CUDA 13 can change `TW_PEARL_MINER_ASSET_REGEX` as described
-in `configs/miners.env`. Its command builder follows the options documented by
+in `configs/miners.env`. Its configured argument arrays follow the options documented by
 [egg5233/tw-pearl-miner](https://github.com/egg5233/tw-pearl-miner): `--pool`,
 `--wallet`, `--worker`, AlphaPool `--password`, and `--pf` when PearlFortune is
 reached through the local GOST address.
@@ -184,6 +190,30 @@ sudo ./scripts/switch_profile.sh --pool kryptex --miner srbminer
 `--miner` may be omitted to use `<POOL>_DEFAULT_MINER`. Append literal runtime
 arguments with a repeatable option, for example `--miner-arg=--no-tui` or
 `--miner-arg=--gpus --miner-arg=0,1`.
+
+Configure each command in `profiles.env` using `<POOL>_<MINER>_ARGS`, with
+uppercase identifiers and hyphens replaced by underscores:
+
+```bash
+ALPHAPOOL_ALPHA_MINER_ARGS=(
+  --pool 'stratum+tcp://{LOCAL_ADDRESS}'
+  --address "${WALLET_ADDRESS}"
+  --worker "${WORKER_NAME}"
+  --password 'x;d=262144;mdl=your-mdl-address'
+)
+```
+
+Each array element is one literal argument. Shell variables expand when the
+configuration is sourced. `{LOCAL_ADDRESS}`, `{TARGET_HOST}`, and `{TARGET_PORT}`
+are replaced after miner-specific endpoint overrides; extra `--miner-arg` values
+are appended literally. The executable and working directory stay in `miners.env`.
+Krig's TLS endpoint and network redirect handling still apply.
+
+Existing installed profiles without an array use the legacy argument builder and
+pool wallet/password fields. Add arrays to `/etc/gost-thread/profiles.env` to
+migrate while preserving your settings. `--replace-config` installs the new
+repository template and resets your pool and wallet settings. Arrays must be
+nonempty indexed Bash arrays; plain command strings are rejected.
 
 The `pearlhash` profile uses WildRig Multi from
 https://github.com/andru-kun/wildrig-multi. The project documents this command
@@ -334,8 +364,7 @@ The same explicit selection can be passed when starting services:
 
 Pools are defined in `configs/profiles.env`; miner installation properties are
 defined independently in `configs/miners.env`. `switch_profile.sh` validates the
-declared pool/miner combination and constructs the correct argv for that miner
-type. All supported combinations run through `pearl-miner.service`.
+declared pool/miner combination and expands its configured argument array. All supported combinations run through `pearl-miner.service`.
 
 For profiles that use GOST, `start_pearl_miners.sh` checks `gost-client.service` and
 the local pool endpoint before starting the miner. If the client tunnel is
@@ -555,4 +584,20 @@ sudo nvidia-smi -pl 250
 nvidia-smi -q -d POWER
 
 nvidia-smi -q -d POWER | grep -i "Power Limit"
+```
+
+## Nvidia GPU Set Lock Memory Frequency
+
+```
+# 查看支持的频率
+nvidia-smi -q -d SUPPORTED_CLOCKS
+
+# 查看当前功耗、显存频率
+nvidia-smi --query-gpu=index,name,power.draw,clocks.mem,clocks.gr --format=csv
+
+# 驱动支持显存频率锁定
+sudo nvidia-smi -i 0 -lmc 810
+
+# 恢复默认设置
+sudo nvidia-smi -i 0 -rmc
 ```
