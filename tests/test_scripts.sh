@@ -332,6 +332,15 @@ test_github_install_and_update() {
     fail "--update did not preserve a fixed-URL miner"
   output="$("${miners_dir}/alpha_miner/alpha-miner")"
   assert_equals "fixed-version" "${output}" "fixed-URL update policy"
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    GOST_THREAD_SYSTEMD_DIR="${TEST_ROOT}/no-systemd-units" \
+    GOST_THREAD_LIBEXEC_DIR="${TEST_ROOT}/no-systemd-libexec" \
+    GOST_THREAD_SYSTEMCTL=/usr/bin/false \
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --no-systemd alpha-miner >/dev/null
+  [[ ! -e "${TEST_ROOT}/no-systemd-units" ]] || fail "direct install wrote systemd units"
+  [[ ! -e "${TEST_ROOT}/no-systemd-libexec" ]] || fail "direct install wrote systemd helpers"
+
 }
 
 require_command() {

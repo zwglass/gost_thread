@@ -5,6 +5,7 @@ REPO_URL="${GOST_THREAD_REPO:-https://github.com/zwglass/gost_thread}"
 BRANCH="${GOST_THREAD_BRANCH:-master}"
 INSTALL_DIR="${GOST_THREAD_INSTALL_DIR:-/opt/gost_thread}"
 TMP_DIR="$(mktemp -d)"
+NO_SYSTEMD="${GOST_THREAD_NO_SYSTEMD:-0}"
 PROMPT_VALUE=""
 
 cleanup() {
@@ -210,7 +211,8 @@ main() {
   require_command curl
   require_command tar
   require_command sed
-  require_command systemctl
+  if ! command -v systemctl >/dev/null 2>&1; then NO_SYSTEMD=1; fi
+  if [[ "${2:-}" == "--no-systemd" ]]; then NO_SYSTEMD=1; fi
 
   if [[ -z "${role}" ]]; then
     echo "Choose install role:" >/dev/tty
@@ -242,6 +244,12 @@ main() {
   download_project
   configure_project "${role}"
 
+  if [[ "${NO_SYSTEMD}" == "1" ]]; then
+    "${INSTALL_DIR}/scripts/install_gost.sh" --no-systemd --role "${role}"
+    echo "Installed without systemd. Configure/install miners, then run:"
+    echo "  ${INSTALL_DIR}/scripts/run_pearl_miners_direct.sh --pool luckypool --miner lpminer"
+    return
+  fi
   "${INSTALL_DIR}/scripts/install_gost.sh" --role "${role}"
   start_services "${role}"
 

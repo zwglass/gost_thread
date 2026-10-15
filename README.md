@@ -601,3 +601,28 @@ sudo nvidia-smi -i 0 -lmc 810
 # 恢复默认设置
 sudo nvidia-smi -i 0 -rmc
 ```
+
+## 无 systemctl：直接运行管道与矿工
+
+安装时可显式跳过 systemd（缺少 systemctl 时也会自动跳过）：
+
+```bash
+sudo ./scripts/install_gost.sh --no-systemd --role client
+sudo ./scripts/install_pearl_miners.sh --no-systemd tw-pearl-miner
+# 一键安装也支持：sudo bash install.sh client --no-systemd
+```
+
+准备好 `client.env` 中的中转服务器信息，以及 `profiles.env` 中的钱包与矿工参数后运行：
+
+```bash
+./scripts/run_pearl_miners_direct.sh --pool luckypool --miner tw-pearl-miner
+# 使用独立配置目录（推荐与 systemd 并存时使用）：
+GOST_THREAD_CONFIG_DIR="$PWD/direct-config" \
+  ./scripts/run_pearl_miners_direct.sh --pool luckypool --miner tw-pearl-miner
+```
+
+直接模式需要 Bash 4.3+ 和 `timeout`（通常由 coreutils 提供），在前台运行 GOST 客户端与矿工；Ctrl-C 或任一进程退出时清理本次启动的两个进程。配置先复制到临时目录，选矿池不会改写原配置，也不调用 systemctl。无参数时使用现有 `client.env` / `miner.env`。
+
+与已有服务并存时，请在独立配置中设置不同的 `LOCAL_LISTEN`；无参数运行时还需同步 `LOCAL_FORWARD`、`MINER_POOL` 和矿工地址参数。已被占用的本地矿池端口会拒绝启动。直接模式不支持需要修改主机 NAT 的 KRig；原 systemd KRig 流程保持原样。直接模式不提供自动重启或开机启动。
+
+`--no-systemd` 安装不会写入服务文件、重载或重启服务；直接安装保留已有配置；并存部署应设置独立的 `GOST_THREAD_CONFIG_DIR`，避免与服务共享端口。默认 systemd 安装与启动命令继续有效。

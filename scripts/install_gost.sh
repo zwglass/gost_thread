@@ -2,9 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG_DIR="/etc/gost-thread"
+CONFIG_DIR="${GOST_THREAD_CONFIG_DIR:-/etc/gost-thread}"
 SYSTEMD_DIR="/etc/systemd/system"
 ROLE="both"
+NO_SYSTEMD=0
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
@@ -59,7 +60,12 @@ check_gost_installed() {
 parse_args() {
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
+      --no-systemd)
+        NO_SYSTEMD=1
+        shift
+        ;;
       --role)
+        [[ "$#" -ge 2 ]] || { echo "Missing value for --role"; exit 1; }
         ROLE="${2:-}"
         shift 2
         ;;
@@ -68,12 +74,12 @@ parse_args() {
         shift
         ;;
       -h | --help)
-        echo "Usage: $0 [--role server|client|both]"
+        echo "Usage: $0 [--no-systemd] [--role server|client|both]"
         exit 0
         ;;
       *)
         echo "Unknown argument: $1"
-        echo "Usage: $0 [--role server|client|both]"
+        echo "Usage: $0 [--no-systemd] [--role server|client|both]"
         exit 1
         ;;
     esac
@@ -83,20 +89,28 @@ parse_args() {
     server | client | both) ;;
     *)
       echo "Invalid role: ${ROLE}"
-      echo "Usage: $0 [--role server|client|both]"
+      echo "Usage: $0 [--no-systemd] [--role server|client|both]"
       exit 1
       ;;
   esac
 }
 
-require_root
 parse_args "$@"
+require_root
 check_gost_installed
 
 install -d -m 0755 "${CONFIG_DIR}"
-install -m 0644 "${ROOT_DIR}/configs/server.env" "${CONFIG_DIR}/server.env"
-install -m 0644 "${ROOT_DIR}/configs/client.env" "${CONFIG_DIR}/client.env"
-install -m 0644 "${ROOT_DIR}/configs/profiles.env" "${CONFIG_DIR}/profiles.env"
+# Direct installs preserve existing credentials/profiles, including service configs.
+if ! command -v systemctl >/dev/null 2>&1; then NO_SYSTEMD=1; fi
+for name in server.env client.env profiles.env; do
+  if [[ "${NO_SYSTEMD}" == "1" && -f "${CONFIG_DIR}/${name}" ]]; then continue; fi
+  install -m 0644 "${ROOT_DIR}/configs/${name}" "${CONFIG_DIR}/${name}"
+done
+if [[ "${NO_SYSTEMD}" == "1" ]] || ! command -v systemctl >/dev/null 2>&1; then
+  echo "Installed configuration without systemd services: ${CONFIG_DIR}"
+  exit 0
+fi
+install -d -m 0755 "${SYSTEMD_DIR}"
 install -m 0644 "${ROOT_DIR}/systemd/gost-server.service" "${SYSTEMD_DIR}/gost-server.service"
 install -m 0644 "${ROOT_DIR}/systemd/gost-client.service" "${SYSTEMD_DIR}/gost-client.service"
 

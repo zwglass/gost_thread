@@ -10,6 +10,7 @@ MINERS_CONFIG="${CONFIG_DIR}/miners.env"
 MINER_RUNTIME_CONFIG="${CONFIG_DIR}/miner.env"
 PROFILES_CONFIG="${CONFIG_DIR}/profiles.env"
 GITHUB_API_BASE="${GOST_THREAD_GITHUB_API_BASE:-https://api.github.com}"
+NO_SYSTEMD=0
 UPDATE_GITHUB=0
 INSTALL_ALL=0
 REPLACE_CONFIG=0
@@ -18,7 +19,7 @@ UPDATED_MINERS=()
 
 usage() {
   cat <<EOF
-Usage: sudo $0 [--all] [--update] [--replace-config] [miner ...]
+Usage: sudo $0 [--no-systemd] [--all] [--update] [--replace-config] [miner ...]
 
 With no miner names, all configured miners are installed. Existing miners are
 left unchanged unless --update is supplied. --update applies only to miners
@@ -39,7 +40,7 @@ EOF
 
 require_root() {
   if [[ "${EUID}" -ne 0 && "${CONFIG_DIR}" == "/etc/gost-thread" ]]; then
-    echo "Please run as root: sudo $0 [--all] [--update] [--replace-config] [miner ...]"
+    echo "Please run as root: sudo $0 [--no-systemd] [--all] [--update] [--replace-config] [miner ...]"
     exit 1
   fi
 }
@@ -56,6 +57,10 @@ require_command() {
 parse_args() {
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
+      --no-systemd)
+        NO_SYSTEMD=1
+        shift
+        ;;
       --all)
         INSTALL_ALL=1
         shift
@@ -560,6 +565,7 @@ install_one_miner() {
 }
 
 install_services() {
+  [[ "${NO_SYSTEMD}" == "0" ]] || return 0
   install -d -m 0755 "${LIBEXEC_DIR}"
   install -d -m 0755 "${SYSTEMD_DIR}"
   install -m 0755 "${ROOT_DIR}/scripts/wait_for_pearl_miner_pool.sh" "${LIBEXEC_DIR}/wait-for-pearl-miner-pool"
@@ -573,6 +579,7 @@ install_services() {
 }
 
 restart_active_miner_if_updated() {
+  [[ "${NO_SYSTEMD}" == "0" ]] || return 0
   local active_miner
   local updated
 
@@ -598,6 +605,7 @@ main() {
   parse_args "$@"
   require_root
   require_command curl
+  if ! command -v "${SYSTEMCTL_BIN}" >/dev/null 2>&1; then NO_SYSTEMD=1; fi
   install_default_config
   install_default_profiles_config
 
@@ -623,6 +631,10 @@ main() {
 
   echo "Miner installation completed."
   echo "Installed configuration: ${MINERS_CONFIG}, ${PROFILES_CONFIG}, ${MINER_RUNTIME_CONFIG}"
+  if [[ "${NO_SYSTEMD}" == "1" ]]; then
+    echo "Run directly: ./scripts/run_pearl_miners_direct.sh --pool luckypool --miner lpminer"
+    return
+  fi
   echo "Select a pool/miner explicitly:"
   echo "  sudo ./scripts/start_pearl_miners.sh --pool luckypool --miner lpminer"
   echo "  sudo ./scripts/start_pearl_miners.sh --pool luckypool --miner tw-pearl-miner"
