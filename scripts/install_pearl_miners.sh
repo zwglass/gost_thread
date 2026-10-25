@@ -31,8 +31,8 @@ runtime-generated miner.env is never replaced by this option.
 
 Examples:
   sudo $0
-  sudo $0 tw-pearl-miner
-  sudo $0 --update wildrig tw-pearl-miner
+  sudo $0 onezerominer
+  sudo $0 --update wildrig onezerominer
   sudo $0 --all --update
   sudo $0 --replace-config --all
 EOF
@@ -637,7 +637,7 @@ main() {
   fi
   echo "Select a pool/miner explicitly:"
   echo "  sudo ./scripts/start_pearl_miners.sh --pool luckypool --miner lpminer"
-  echo "  sudo ./scripts/start_pearl_miners.sh --pool luckypool --miner tw-pearl-miner"
+  echo "  sudo ./scripts/start_pearl_miners.sh --pool kryptex --miner onezerominer"
 }
 
 main "$@"

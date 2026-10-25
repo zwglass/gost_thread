@@ -126,7 +126,7 @@ sudo --preserve-env=http_proxy,https_proxy,all_proxy,no_proxy,HTTP_PROXY,HTTPS_P
 ```
 
 The installer supports `lpminer`, `alpha-miner`, WildRig Multi, Pearl Fortune,
-PeakMiner, SRBMiner-Multi, Krig Miner, OneZeroMiner, and `tw-pearl-miner`. On a fresh
+PeakMiner, SRBMiner-Multi, Krig Miner, and OneZeroMiner. On a fresh
 installation it derives an absolute directory from the project location and
 installs local binaries under `<project-directory>/miners/` by default:
 
@@ -139,15 +139,14 @@ installs local binaries under `<project-directory>/miners/` by default:
 <project-directory>/miners/srbminer/SRBMiner-MULTI
 <project-directory>/miners/onezerominer/onezerominer
 <project-directory>/miners/krig-miner/krig-miner
-<project-directory>/miners/tw-pearl-miner/pearl-gpu-miner
 ```
 
 Install one miner or update GitHub-managed miners explicitly:
 
 ```bash
-sudo ./scripts/install_pearl_miners.sh tw-pearl-miner
+sudo ./scripts/install_pearl_miners.sh onezerominer
 sudo ./scripts/install_pearl_miners.sh krig-miner
-sudo ./scripts/install_pearl_miners.sh --update wildrig tw-pearl-miner
+sudo ./scripts/install_pearl_miners.sh --update wildrig onezerominer
 sudo ./scripts/install_pearl_miners.sh --all --update
 sudo ./scripts/install_pearl_miners.sh --replace-config --all
 
@@ -171,19 +170,10 @@ repository templates. This resets pool, wallet, and miner installation settings;
 The runtime-generated `miner.env` is left untouched. When `--replace-config` is
 used, it is neither created nor overwritten from the static template.
 
-`tw-pearl-miner` defaults to its Linux CUDA 12 archive (`*.c12.tar.gz`) and
-never matches Windows, B300, HiveOS, or MMPOS assets. Systems with an NVIDIA
-driver suitable for CUDA 13 can change `TW_PEARL_MINER_ASSET_REGEX` as described
-in `configs/miners.env`. Its configured argument arrays follow the options documented by
-[egg5233/tw-pearl-miner](https://github.com/egg5233/tw-pearl-miner): `--pool`,
-`--wallet`, `--worker`, AlphaPool `--password`, and `--pf` when PearlFortune is
-reached through the local GOST address.
-
 Switch the active pool and miner with explicit options:
 
 ```bash
 sudo ./scripts/switch_profile.sh --pool luckypool --miner lpminer
-sudo ./scripts/switch_profile.sh --pool luckypool --miner tw-pearl-miner
 sudo ./scripts/switch_profile.sh --pool pearlhash --miner wildrig
 sudo ./scripts/switch_profile.sh --pool kryptex --miner srbminer
 ```
@@ -262,7 +252,7 @@ For an existing installation, merge `PEARLHASH_SUPPORTED_MINERS` and
 
 The `pearlfortune` pool follows the CUDA command shape from
 https://github.com/pearlfortune/pearl-miner. The installer selects the stable
-Linux `pearlfortune-vX.Y.Z.tar.gz` Release asset and uses `miner-cuda13`:
+Linux `pearlfortune-vX.Y.Z.tar.gz` Release asset (including the optional `fix` suffix) and uses `miner-cuda13`:
 
 ```bash
 ./miner-cuda13 \
@@ -390,7 +380,7 @@ The same explicit selection can be passed when starting services:
 ./scripts/start_client.sh --pool luckypool --miner lpminer
 ./scripts/start_pearl_miners.sh --pool alphapool --miner alpha-miner
 ./scripts/start_pearl_miners.sh --pool pearlhash --miner wildrig
-./scripts/start_pearl_miners.sh --pool pearlfortune --miner tw-pearl-miner
+./scripts/start_pearl_miners.sh --pool pearlfortune --miner pearlfortune
 ./scripts/start_pearl_miners.sh --pool herominers --miner peakminer
 ./scripts/start_pearl_miners.sh --pool kryptex --miner srbminer
 ```
@@ -557,7 +547,7 @@ Pearl Miners:
 ```bash
 ./scripts/start_pearl_miners.sh
 ./scripts/start_pearl_miners.sh --pool luckypool --miner lpminer
-./scripts/start_pearl_miners.sh --pool alphapool --miner tw-pearl-miner
+./scripts/start_pearl_miners.sh --pool alphapool --miner alpha-miner
 ./scripts/start_pearl_miners.sh --pool pearlhash --miner wildrig
 ./scripts/start_pearl_miners.sh --pool pearlfortune --miner pearlfortune
 ./scripts/start_pearl_miners.sh --pool herominers --miner peakminer
@@ -641,17 +631,17 @@ sudo nvidia-smi -i 0 -rmc
 
 ```bash
 sudo ./scripts/install_gost.sh --no-systemd --role client
-sudo ./scripts/install_pearl_miners.sh --no-systemd tw-pearl-miner
+sudo ./scripts/install_pearl_miners.sh --no-systemd onezerominer
 # 一键安装也支持：sudo bash install.sh client --no-systemd
 ```
 
 准备好 `client.env` 中的中转服务器信息，以及 `profiles.env` 中的钱包与矿工参数后运行：
 
 ```bash
-./scripts/run_pearl_miners_direct.sh --pool luckypool --miner tw-pearl-miner
+./scripts/run_pearl_miners_direct.sh --pool luckypool --miner lpminer
 # 使用独立配置目录（推荐与 systemd 并存时使用）：
 GOST_THREAD_CONFIG_DIR="$PWD/direct-config" \
-  ./scripts/run_pearl_miners_direct.sh --pool luckypool --miner tw-pearl-miner
+  ./scripts/run_pearl_miners_direct.sh --pool luckypool --miner lpminer
 ```
 
 直接模式需要 Bash 4.3+ 和 `timeout`（通常由 coreutils 提供），在前台运行 GOST 客户端与矿工；Ctrl-C 或任一进程退出时清理本次启动的两个进程。配置先复制到临时目录，选矿池不会改写原配置，也不调用 systemctl。无参数时使用现有 `client.env` / `miner.env`。

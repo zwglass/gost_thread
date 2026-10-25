@@ -338,16 +338,6 @@ build_legacy_miner_args() {
       append_option --user "${wallet}/${worker}"
       append_option --password "${password}"
       ;;
-    tw-pearl-miner)
-      append_option --pool "${local_address}"
-      append_option --wallet "${wallet}"
-      append_option --worker "${worker}"
-      if [[ "${pool}" == "pearlfortune" ]]; then
-        append_arg --pf
-      elif [[ "${pool}" == "alphapool" ]]; then
-        append_option --password "${password}"
-      fi
-      ;;
     *)
       echo "No argument builder is implemented for miner: ${miner}"
       exit 1

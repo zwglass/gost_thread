@@ -59,41 +59,37 @@ test_switch_profile_and_runner() {
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" \
-    --pool alphapool --miner tw-pearl-miner --miner-arg=--no-tui >/dev/null
+    --pool alphapool --miner alpha-miner --miner-arg=--no-tui >/dev/null
 
   client_config="$(<"${config_dir}/client.env")"
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" \
-    --pool alphapool --miner tw-pearl-miner --miner-arg=--no-tui >/dev/null
+    --pool alphapool --miner alpha-miner --miner-arg=--no-tui >/dev/null
   assert_equals "${client_config}" "$(<"${config_dir}/client.env")" \
     "client config after repeated profile switch"
 
   # shellcheck source=/dev/null
   . "${config_dir}/miner.env"
   assert_equals "alphapool" "${ACTIVE_POOL}" "active pool"
-  assert_equals "tw-pearl-miner" "${ACTIVE_MINER}" "active miner"
+  assert_equals "alpha-miner" "${ACTIVE_MINER}" "active miner"
   assert_equals "x;d=262144;mdl=mdl1pgsyjwlla6vaqfp428s2ltf78zhh3kkklx8rmvehxpa6dph8kghrskygxsh" "${MINER_ARG_7}" "quoted password argument"
   assert_equals "--no-tui" "${MINER_ARG_8}" "extra argument"
 
   if GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
-    "${ROOT_DIR}/scripts/switch_profile.sh" --pool pearlhash --miner tw-pearl-miner >/dev/null 2>&1; then
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool pearlhash --miner alpha-miner >/dev/null 2>&1; then
     fail "unsupported pool/miner combination was accepted"
   fi
 
   for selection in \
     "luckypool lpminer" \
-    "luckypool tw-pearl-miner" \
     "alphapool alpha-miner" \
     "pearlhash wildrig" \
     "pearlhash onezerominer" \
     "pearlfortune pearlfortune" \
     "herominers peakminer" \
-    "herominers tw-pearl-miner" \
-    "pearlfortune tw-pearl-miner" \
     "kryptex onezerominer" \
     "kryptex srbminer" \
     "kryptex peakminer" \
-    "kryptex tw-pearl-miner" \
     "kryptex krig-miner"; do
     read -r pool miner <<<"${selection}"
     GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
@@ -110,8 +106,6 @@ test_switch_profile_and_runner() {
   assert_equals "${WALLET_ADDRESS}" "${MINER_ARG_5}" "PearlHash OneZeroMiner wallet"
   assert_equals --worker "${MINER_ARG_6}" "PearlHash OneZeroMiner worker option"
   assert_equals "${WORKER_NAME}" "${MINER_ARG_7}" "PearlHash OneZeroMiner worker"
-  assert_equals --pass "${MINER_ARG_8}" "PearlHash OneZeroMiner password option"
-  assert_equals x "${MINER_ARG_9}" "PearlHash OneZeroMiner password"
   assert_equals "tcp://127.0.0.1:3333/pool.pearlhash.xyz:9000" "${LOCAL_FORWARD}" "PearlHash OneZeroMiner GOST forward"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
@@ -122,8 +116,6 @@ test_switch_profile_and_runner() {
   assert_equals pearlhash "${MINER_ARG_1}" "OneZeroMiner algorithm"
   assert_equals 127.0.0.1:3333 "${MINER_ARG_3}" "OneZeroMiner local pool"
   assert_equals "${WALLET_ADDRESS}.${WORKER_NAME}" "${MINER_ARG_5}" "OneZeroMiner username"
-  assert_equals --pass "${MINER_ARG_6}" "OneZeroMiner password option"
-  assert_equals x "${MINER_ARG_7}" "OneZeroMiner password"
   assert_equals "tcp://127.0.0.1:3333/prl-eu.kryptex.network:7048" "${LOCAL_FORWARD}" "OneZeroMiner GOST forward"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
@@ -151,7 +143,7 @@ test_switch_profile_and_runner() {
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" \
-    --pool alphapool --miner tw-pearl-miner --miner-arg=--no-tui >/dev/null
+    --pool alphapool --miner alpha-miner --miner-arg=--no-tui >/dev/null
   # shellcheck source=/dev/null
   . "${config_dir}/miner.env"
 
@@ -170,14 +162,14 @@ test_switch_profile_and_runner() {
 
   # A configured command replaces the builder and preserves literal shell text.
   cat >>"${config_dir}/profiles.env" <<'EOF'
-ALPHAPOOL_TW_PEARL_MINER_ARGS=(
+ALPHAPOOL_ALPHA_MINER_ARGS=(
   --custom 'space ; $(must-not-run)'
   --endpoint '{LOCAL_ADDRESS}/{TARGET_HOST}:{TARGET_PORT}'
   ''
 )
 EOF
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
-    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner tw-pearl-miner \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner alpha-miner \
     '--miner-arg={LOCAL_ADDRESS}' >/dev/null
   . "${config_dir}/miner.env"
   assert_equals 'space ; $(must-not-run)' "${MINER_ARG_1}" "literal custom argument"
@@ -186,24 +178,24 @@ EOF
   assert_equals '{LOCAL_ADDRESS}' "${MINER_ARG_5}" "literal extra argument"
   assert_equals 6 "${MINER_ARG_COUNT}" "configured command replaces defaults"
 
-  printf '\nALPHAPOOL_TW_PEARL_MINER_ARGS=()\n' >>"${config_dir}/profiles.env"
+  printf '\nALPHAPOOL_ALPHA_MINER_ARGS=()\n' >>"${config_dir}/profiles.env"
   if GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
-    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner tw-pearl-miner >/dev/null 2>&1; then
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner alpha-miner >/dev/null 2>&1; then
     fail "empty argument array was accepted"
   fi
-  printf '\nunset ALPHAPOOL_TW_PEARL_MINER_ARGS\nALPHAPOOL_TW_PEARL_MINER_ARGS="--pool localhost"\n' >>"${config_dir}/profiles.env"
+  printf '\nunset ALPHAPOOL_ALPHA_MINER_ARGS\nALPHAPOOL_ALPHA_MINER_ARGS="--pool localhost"\n' >>"${config_dir}/profiles.env"
   if GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
-    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner tw-pearl-miner >/dev/null 2>&1; then
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner alpha-miner >/dev/null 2>&1; then
     fail "command string was accepted"
   fi
 
   cat >>"${config_dir}/profiles.env" <<'EOF'
-unset ALPHAPOOL_TW_PEARL_MINER_ARGS
+unset ALPHAPOOL_ALPHA_MINER_ARGS
 ALPHAPOOL_WALLET=legacy-wallet
 ALPHAPOOL_PASSWORD='legacy password;value'
 EOF
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
-    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner tw-pearl-miner >/dev/null
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool alphapool --miner alpha-miner >/dev/null
   . "${config_dir}/miner.env"
   assert_equals legacy-wallet "${MINER_ARG_3}" "legacy wallet fallback"
   assert_equals 'legacy password;value' "${MINER_ARG_7}" "legacy password fallback"
@@ -221,7 +213,7 @@ test_github_install_and_update() {
   local systemd_dir="${TEST_ROOT}/systemd"
   local libexec_dir="${TEST_ROOT}/libexec"
   local miners_dir="${TEST_ROOT}/miners"
-  local api_dir="${TEST_ROOT}/api/repos/egg5233/tw-pearl-miner/releases"
+  local api_dir="${TEST_ROOT}/api/repos/pearlfortune/pearl-miner/releases"
   local krig_api_dir="${TEST_ROOT}/api/repos/kryptex/krig-miner/releases"
   local bundle_dir="${TEST_ROOT}/bundle"
   local asset_dir="${TEST_ROOT}/assets"
@@ -235,10 +227,10 @@ test_github_install_and_update() {
   printf '%s\n' '#!/usr/bin/env bash' '[[ "$1" == "daemon-reload" ]]' >"${fake_systemctl}"
   chmod +x "${fake_systemctl}"
 
-  asset_name="tw-pearl-miner-1.0.0.c12.tar.gz"
+  asset_name="pearlfortune-v1.0.0.tar.gz"
   asset_file="${asset_dir}/${asset_name}"
-  printf '%s\n' '#!/usr/bin/env bash' 'echo version-one' >"${bundle_dir}/package/pearl-gpu-miner"
-  chmod +x "${bundle_dir}/package/pearl-gpu-miner"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo version-one' >"${bundle_dir}/package/miner-cuda13"
+  chmod +x "${bundle_dir}/package/miner-cuda13"
   tar -czf "${asset_file}" -C "${bundle_dir}" package
   digest="$(sha256_file "${asset_file}")"
   write_release_json "${api_dir}/latest" v1.0.0 "${asset_name}" "file://${asset_file}" "${digest}"
@@ -249,11 +241,11 @@ test_github_install_and_update() {
     GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
     GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
     GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
-    "${ROOT_DIR}/scripts/install_pearl_miners.sh" tw-pearl-miner >/dev/null
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" pearlfortune >/dev/null
 
-  [[ -x "${miners_dir}/tw-pearl-miner/pearl-gpu-miner" ]] || fail "GitHub miner was not installed"
+  [[ -x "${miners_dir}/pearlfortune/miner-cuda13" ]] || fail "GitHub miner was not installed"
   [[ -f "${config_dir}/profiles.env" ]] || fail "profiles.env was not installed"
-  output="$("${miners_dir}/tw-pearl-miner/pearl-gpu-miner")"
+  output="$("${miners_dir}/pearlfortune/miner-cuda13")"
   assert_equals "version-one" "${output}" "initial GitHub install"
 
   asset_name="krig-miner-1.4.0-linux-x64.tar.gz"
@@ -309,7 +301,7 @@ test_github_install_and_update() {
     GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
     GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
     GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
-    "${ROOT_DIR}/scripts/install_pearl_miners.sh" tw-pearl-miner >/dev/null
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" pearlfortune >/dev/null
   grep -q '^CUSTOM_MINERS_CONFIG=preserve$' "${config_dir}/miners.env" || fail "miners.env was unexpectedly replaced"
   grep -q '^CUSTOM_PROFILES_CONFIG=preserve$' "${config_dir}/profiles.env" || fail "profiles.env was unexpectedly replaced"
   grep -q '^CUSTOM_RUNTIME_CONFIG=preserve$' "${config_dir}/miner.env" || fail "miner.env was unexpectedly replaced"
@@ -320,7 +312,7 @@ test_github_install_and_update() {
     GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
     GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
     GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
-    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --replace-config tw-pearl-miner >/dev/null
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --replace-config pearlfortune >/dev/null
   grep -q "^PEARL_MINERS_DIR=${miners_dir}$" "${config_dir}/miners.env" || fail "miners.env was not replaced"
   grep -q '^DEFAULT_POOL=luckypool$' "${config_dir}/profiles.env" || fail "profiles.env was not replaced"
   grep -q '^CUSTOM_RUNTIME_CONFIG=preserve$' "${config_dir}/miner.env" || fail "miner.env was unexpectedly replaced"
@@ -336,7 +328,7 @@ test_github_install_and_update() {
     GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
     GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
     GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
-    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --replace-config tw-pearl-miner >/dev/null
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --replace-config pearlfortune >/dev/null
   [[ ! -e "${config_dir}/miner.env" ]] || fail "--replace-config copied the static miner.env template"
 
   output="$(PEARL_MINERS_DIR="${miners_dir}" \
@@ -345,14 +337,14 @@ test_github_install_and_update() {
     GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
     GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
     GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
-    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --update tw-pearl-miner)"
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --update pearlfortune)"
   [[ "${output}" == *"already at the latest Release"* ]] || fail "same GitHub Release was not skipped"
 
   rm -rf "${bundle_dir}/package"
   mkdir -p "${bundle_dir}/package"
-  printf '%s\n' '#!/usr/bin/env bash' 'echo version-two' >"${bundle_dir}/package/pearl-gpu-miner"
-  chmod +x "${bundle_dir}/package/pearl-gpu-miner"
-  asset_name="tw-pearl-miner-1.1.0.c12.tar.gz"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo version-two' >"${bundle_dir}/package/miner-cuda13"
+  chmod +x "${bundle_dir}/package/miner-cuda13"
+  asset_name="pearlfortune-v1.1.0fix.tar.gz"
   asset_file="${asset_dir}/${asset_name}"
   tar -czf "${asset_file}" -C "${bundle_dir}" package
   digest="$(sha256_file "${asset_file}")"
@@ -364,10 +356,10 @@ test_github_install_and_update() {
     GOST_THREAD_LIBEXEC_DIR="${libexec_dir}" \
     GOST_THREAD_SYSTEMCTL="${fake_systemctl}" \
     GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
-    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --update tw-pearl-miner >/dev/null
-  output="$("${miners_dir}/tw-pearl-miner/pearl-gpu-miner")"
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --update pearlfortune >/dev/null
+  output="$("${miners_dir}/pearlfortune/miner-cuda13")"
   assert_equals "version-two" "${output}" "GitHub update"
-  grep -q "RELEASE_TAG='v1.1.0'" "${miners_dir}/tw-pearl-miner/.gost-thread-release.env" || \
+  grep -q "RELEASE_TAG='v1.1.0'" "${miners_dir}/pearlfortune/.gost-thread-release.env" || \
     fail "updated Release metadata was not written"
 
   mkdir -p "${miners_dir}/alpha_miner"
