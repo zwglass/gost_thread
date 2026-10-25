@@ -126,7 +126,7 @@ sudo --preserve-env=http_proxy,https_proxy,all_proxy,no_proxy,HTTP_PROXY,HTTPS_P
 ```
 
 The installer supports `lpminer`, `alpha-miner`, WildRig Multi, Pearl Fortune,
-PeakMiner, SRBMiner-Multi, Krig Miner, and `tw-pearl-miner`. On a fresh
+PeakMiner, SRBMiner-Multi, Krig Miner, OneZeroMiner, and `tw-pearl-miner`. On a fresh
 installation it derives an absolute directory from the project location and
 installs local binaries under `<project-directory>/miners/` by default:
 
@@ -137,6 +137,7 @@ installs local binaries under `<project-directory>/miners/` by default:
 <project-directory>/miners/pearlfortune/miner-cuda13
 <project-directory>/miners/peakminer/peakminer
 <project-directory>/miners/srbminer/SRBMiner-MULTI
+<project-directory>/miners/onezerominer/onezerominer
 <project-directory>/miners/krig-miner/krig-miner
 <project-directory>/miners/tw-pearl-miner/pearl-gpu-miner
 ```
@@ -245,6 +246,20 @@ The resulting path is:
 wildrig-multi -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:9000
 ```
 
+The `pearlhash` pool also supports OneZeroMiner with `--algo pearlhash`,
+a separate `--wallet` and `--worker`, and `--pass x`. It connects through the
+same local GOST tunnel to `pool.pearlhash.xyz:9000`:
+
+```bash
+sudo ./scripts/install_pearl_miners.sh onezerominer
+sudo ./scripts/start_pearl_miners.sh --pool pearlhash --miner onezerominer
+```
+
+For an existing installation, merge `PEARLHASH_SUPPORTED_MINERS` and
+`PEARLHASH_ONEZEROMINER_ARGS` from `configs/profiles.env` into
+`/etc/gost-thread/profiles.env`, along with the OneZeroMiner entries in
+`miners.env` if they have not already been added.
+
 The `pearlfortune` pool follows the CUDA command shape from
 https://github.com/pearlfortune/pearl-miner. The installer selects the stable
 Linux `pearlfortune-vX.Y.Z.tar.gz` Release asset and uses `miner-cuda13`:
@@ -305,6 +320,24 @@ The `kryptex` profile uses SRBMiner-Multi by default, and also supports
 [Krig Miner](https://github.com/kryptex/krig-miner). Krig Miner requires a
 TLS-only pool connection, so its selection uses Kryptex's TLS endpoint while
 the other miners continue to use the existing non-SSL endpoint.
+
+[OneZeroMiner](https://github.com/OneZeroMiner/onezerominer) is also supported
+with `--algo pearlhash`. The installer selects `onezerominer-linux-X.Y.Z.tar.gz`
+from the latest stable GitHub Release. Its pool connection uses the existing
+local GOST tunnel and the configured `<wallet>.<worker>` username:
+
+```bash
+sudo ./scripts/install_pearl_miners.sh onezerominer
+sudo ./scripts/start_pearl_miners.sh --pool kryptex --miner onezerominer
+# Update the installed binary:
+sudo ./scripts/install_pearl_miners.sh --update onezerominer
+```
+
+For existing installations, add the OneZeroMiner entries from `configs/miners.env`
+and `configs/profiles.env` to the corresponding files in `/etc/gost-thread/`.
+Alternatively, `--replace-config onezerominer` refreshes both files from the
+repository templates; save custom wallets, workers, paths, and pool settings
+before using it and reapply them before starting the miner.
 
 KRig validates the official pool address. After selecting `kryptex/krig-miner`,
 enable the host-level redirect that routes its official TLS connection through

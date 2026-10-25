@@ -85,10 +85,12 @@ test_switch_profile_and_runner() {
     "luckypool tw-pearl-miner" \
     "alphapool alpha-miner" \
     "pearlhash wildrig" \
+    "pearlhash onezerominer" \
     "pearlfortune pearlfortune" \
     "herominers peakminer" \
     "herominers tw-pearl-miner" \
     "pearlfortune tw-pearl-miner" \
+    "kryptex onezerominer" \
     "kryptex srbminer" \
     "kryptex peakminer" \
     "kryptex tw-pearl-miner" \
@@ -97,6 +99,32 @@ test_switch_profile_and_runner() {
     GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
       "${ROOT_DIR}/scripts/switch_profile.sh" --pool "${pool}" --miner "${miner}" >/dev/null
   done
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool pearlhash --miner onezerominer >/dev/null
+  . "${config_dir}/miner.env"
+  . "${config_dir}/profiles.env"
+  . "${config_dir}/client.env"
+  assert_equals pearlhash "${MINER_ARG_1}" "PearlHash OneZeroMiner algorithm"
+  assert_equals 127.0.0.1:3333 "${MINER_ARG_3}" "PearlHash OneZeroMiner local pool"
+  assert_equals "${WALLET_ADDRESS}" "${MINER_ARG_5}" "PearlHash OneZeroMiner wallet"
+  assert_equals --worker "${MINER_ARG_6}" "PearlHash OneZeroMiner worker option"
+  assert_equals "${WORKER_NAME}" "${MINER_ARG_7}" "PearlHash OneZeroMiner worker"
+  assert_equals --pass "${MINER_ARG_8}" "PearlHash OneZeroMiner password option"
+  assert_equals x "${MINER_ARG_9}" "PearlHash OneZeroMiner password"
+  assert_equals "tcp://127.0.0.1:3333/pool.pearlhash.xyz:9000" "${LOCAL_FORWARD}" "PearlHash OneZeroMiner GOST forward"
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool kryptex --miner onezerominer >/dev/null
+  . "${config_dir}/miner.env"
+  . "${config_dir}/profiles.env"
+  . "${config_dir}/client.env"
+  assert_equals pearlhash "${MINER_ARG_1}" "OneZeroMiner algorithm"
+  assert_equals 127.0.0.1:3333 "${MINER_ARG_3}" "OneZeroMiner local pool"
+  assert_equals "${WALLET_ADDRESS}.${WORKER_NAME}" "${MINER_ARG_5}" "OneZeroMiner username"
+  assert_equals --pass "${MINER_ARG_6}" "OneZeroMiner password option"
+  assert_equals x "${MINER_ARG_7}" "OneZeroMiner password"
+  assert_equals "tcp://127.0.0.1:3333/prl-eu.kryptex.network:7048" "${LOCAL_FORWARD}" "OneZeroMiner GOST forward"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" --pool kryptex --miner krig-miner >/dev/null
@@ -248,6 +276,29 @@ test_github_install_and_update() {
   [[ -x "${miners_dir}/krig-miner/krig-miner" ]] || fail "Krig Miner was not installed"
   output="$("${miners_dir}/krig-miner/krig-miner")"
   assert_equals "krig-version" "${output}" "Krig Miner install"
+
+  local onezero_api_dir="${TEST_ROOT}/api/repos/OneZeroMiner/onezerominer/releases"
+  mkdir -p "${onezero_api_dir}"
+  rm -rf "${bundle_dir}/package"
+  mkdir -p "${bundle_dir}/package"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo onezero-version' >"${bundle_dir}/package/onezerominer"
+  chmod +x "${bundle_dir}/package/onezerominer"
+  asset_name="onezerominer-linux-1.8.3.tar.gz"
+  asset_file="${asset_dir}/${asset_name}"
+  tar -czf "${asset_file}" -C "${bundle_dir}" package
+  digest="$(sha256_file "${asset_file}")"
+  write_release_json "${onezero_api_dir}/latest" v1.8.3 "${asset_name}" "file://${asset_file}" "${digest}"
+  # Upstream also publishes a generic tarball and a Windows build; neither
+  # should produce a second match or replace the explicit Linux archive.
+  jq '.assets += [{name:"onezerominer-1.8.3.tar.gz"}, {name:"onezerominer-win64-1.8.3.zip"}]' \
+    "${onezero_api_dir}/latest" >"${onezero_api_dir}/latest.tmp"
+  mv "${onezero_api_dir}/latest.tmp" "${onezero_api_dir}/latest"
+  PEARL_MINERS_DIR="${miners_dir}" \
+    GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    GOST_THREAD_GITHUB_API_BASE="file://${TEST_ROOT}/api" \
+    "${ROOT_DIR}/scripts/install_pearl_miners.sh" --no-systemd onezerominer >/dev/null
+  output="$("${miners_dir}/onezerominer/onezerominer")"
+  assert_equals onezero-version "${output}" "OneZeroMiner Linux install"
 
   printf '%s\n' 'CUSTOM_MINERS_CONFIG=preserve' >>"${config_dir}/miners.env"
   printf '%s\n' 'CUSTOM_PROFILES_CONFIG=preserve' >>"${config_dir}/profiles.env"
