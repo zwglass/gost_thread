@@ -29,12 +29,18 @@ scripts/
   stop_pearl_miners.sh
   status.sh
   uninstall.sh
+gost-thread               # management CLI
+CLI.md                    # CLI usage
 systemd/
   gost-server.service
   gost-client.service
   pearl-miner.service
 logs/
 ```
+
+## CLI
+
+CLI usage: [CLI.md](CLI.md)
 
 ## Requirements
 
@@ -116,14 +122,7 @@ Default expected binary:
 ~/programs/pearl_miners/lpminer/lpminer
 ```
 
-Install Pearl miners on the client machine:
-
-```bash
-sudo ./scripts/install_pearl_miners.sh
-
-# 走系统代理安装更新
-sudo --preserve-env=http_proxy,https_proxy,all_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY ./scripts/install_pearl_miners.sh
-```
+Installation and update commands are documented in [CLI.md](CLI.md).
 
 The installer supports `lpminer`, `alpha-miner`, WildRig Multi, Pearl Fortune,
 PeakMiner, SRBMiner-Multi, Krig Miner, and OneZeroMiner. On a fresh
@@ -139,19 +138,6 @@ installs local binaries under `<project-directory>/miners/` by default:
 <project-directory>/miners/srbminer/SRBMiner-MULTI
 <project-directory>/miners/onezerominer/onezerominer
 <project-directory>/miners/krig-miner/krig-miner
-```
-
-Install one miner or update GitHub-managed miners explicitly:
-
-```bash
-sudo ./scripts/install_pearl_miners.sh onezerominer
-sudo ./scripts/install_pearl_miners.sh krig-miner
-sudo ./scripts/install_pearl_miners.sh --update wildrig onezerominer
-sudo ./scripts/install_pearl_miners.sh --all --update
-sudo ./scripts/install_pearl_miners.sh --replace-config --all
-
-# 走系统代理安装更新
-sudo --preserve-env=http_proxy,https_proxy,all_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY ./scripts/install_pearl_miners.sh --all --update
 ```
 
 Without `--update`, an existing executable is left unchanged. With `--update`,
@@ -170,17 +156,7 @@ repository templates. This resets pool, wallet, and miner installation settings;
 The runtime-generated `miner.env` is left untouched. When `--replace-config` is
 used, it is neither created nor overwritten from the static template.
 
-Switch the active pool and miner with explicit options:
-
-```bash
-sudo ./scripts/switch_profile.sh --pool luckypool --miner lpminer
-sudo ./scripts/switch_profile.sh --pool pearlhash --miner wildrig
-sudo ./scripts/switch_profile.sh --pool kryptex --miner srbminer
-```
-
-`--miner` may be omitted to use `<POOL>_DEFAULT_MINER`. Append literal runtime
-arguments with a repeatable option, for example `--miner-arg=--no-tui` or
-`--miner-arg=--gpus --miner-arg=0,1`.
+Profile switching commands and options are documented in [CLI.md](CLI.md).
 
 Configure each command in `profiles.env` using `<POOL>_<MINER>_ARGS`, with
 uppercase identifiers and hyphens replaced by underscores:
@@ -238,12 +214,7 @@ wildrig-multi -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:900
 
 The `pearlhash` pool also supports OneZeroMiner with `--algo pearlhash`,
 a separate `--wallet` and `--worker`, and `--pass x`. It connects through the
-same local GOST tunnel to `pool.pearlhash.xyz:9000`:
-
-```bash
-sudo ./scripts/install_pearl_miners.sh onezerominer
-sudo ./scripts/start_pearl_miners.sh --pool pearlhash --miner onezerominer
-```
+same local GOST tunnel to `pool.pearlhash.xyz:9000`.
 
 For an existing installation, merge `PEARLHASH_SUPPORTED_MINERS` and
 `PEARLHASH_ONEZEROMINER_ARGS` from `configs/profiles.env` into
@@ -314,14 +285,7 @@ the other miners continue to use the existing non-SSL endpoint.
 [OneZeroMiner](https://github.com/OneZeroMiner/onezerominer) is also supported
 with `--algo pearlhash`. The installer selects `onezerominer-linux-X.Y.Z.tar.gz`
 from the latest stable GitHub Release. Its pool connection uses the existing
-local GOST tunnel and the configured `<wallet>.<worker>` username:
-
-```bash
-sudo ./scripts/install_pearl_miners.sh onezerominer
-sudo ./scripts/start_pearl_miners.sh --pool kryptex --miner onezerominer
-# Update the installed binary:
-sudo ./scripts/install_pearl_miners.sh --update onezerominer
-```
+local GOST tunnel and the configured `<wallet>.<worker>` username.
 
 For existing installations, add the OneZeroMiner entries from `configs/miners.env`
 and `configs/profiles.env` to the corresponding files in `/etc/gost-thread/`.
@@ -329,18 +293,11 @@ Alternatively, `--replace-config onezerominer` refreshes both files from the
 repository templates; save custom wallets, workers, paths, and pool settings
 before using it and reapply them before starting the miner.
 
-KRig validates the official pool address. After selecting `kryptex/krig-miner`,
-enable the host-level redirect that routes its official TLS connection through
-the local GOST listener:
-
-```bash
-sudo ./scripts/krig_gost_redirect.sh enable
-sudo ./scripts/krig_gost_redirect.sh status
-```
-
-This uses an iptables OUTPUT DNAT rule, not an `/etc/hosts` override; DNS must
-continue resolving `prl.kryptex.network` to its public address. Disable it with
-`sudo ./scripts/krig_gost_redirect.sh disable`.
+KRig validates the official pool address. Its host-level redirect routes the
+official TLS connection through the local GOST listener using an iptables
+OUTPUT DNAT rule, not an `/etc/hosts` override. DNS must continue resolving
+`prl.kryptex.network` to its public address. Redirect commands are documented
+in [CLI.md](CLI.md).
 [SRBMiner-Multi](https://github.com/doktor83/SRBMiner-Multi) is the default;
 Kryptex lists Pearl as the
 `PearlHash` algorithm and the Global non-SSL endpoint as:
@@ -374,17 +331,6 @@ The resulting path is:
 SRBMiner-MULTI -> 127.0.0.1:3333 -> gost-client.service -> prl.kryptex.network:7048
 ```
 
-The same explicit selection can be passed when starting services:
-
-```bash
-./scripts/start_client.sh --pool luckypool --miner lpminer
-./scripts/start_pearl_miners.sh --pool alphapool --miner alpha-miner
-./scripts/start_pearl_miners.sh --pool pearlhash --miner wildrig
-./scripts/start_pearl_miners.sh --pool pearlfortune --miner pearlfortune
-./scripts/start_pearl_miners.sh --pool herominers --miner peakminer
-./scripts/start_pearl_miners.sh --pool kryptex --miner srbminer
-```
-
 Pools are defined in `configs/profiles.env`; miner installation properties are
 defined independently in `configs/miners.env`. `switch_profile.sh` validates the
 declared pool/miner combination and expands its configured argument array. All supported combinations run through `pearl-miner.service`.
@@ -394,72 +340,15 @@ the local pool endpoint before starting the miner. If the client tunnel is
 inactive or the local pool port is not reachable, it runs `stop_client.sh` and
 `start_client.sh` once, then verifies the tunnel again.
 
-View Pearl miner runtime output:
-
-```bash
-sudo journalctl -u pearl-miner -f
-```
-
-View recent Pearl miner logs:
-
-```bash
-sudo journalctl -u pearl-miner -n 100 --no-pager
-```
-
-View full Pearl miner service status and command:
-
-```bash
-systemctl status pearl-miner --no-pager -l
-```
-
-View current miner process and installed config:
-
-```bash
-ps -fp $(pidof lpminer)
-ps -fp $(pidof alpha-miner)
-ps -fp $(pidof wildrig-multi)
-ps -fp $(pidof miner)
-ps -fp $(pidof peakminer)
-ps -fp $(pidof SRBMiner-MULTI)
-ps -fp $(pidof pearl-gpu-miner)
-sudo cat /etc/gost-thread/miner.env
-sudo cat /etc/gost-thread/miners.env
-sudo cat /etc/gost-thread/profiles.env
-```
+Service status, process diagnostics, and log commands are documented in
+[CLI.md](CLI.md).
 
 ## Install
 
 ### One-Line GitHub Install
 
 Use the GitHub installer from `zwglass/gost_thread`.
-
-Server machine:
-
-```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo bash -s -- server
-```
-
-Client machine:
-
-```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo bash -s -- client
-```
-
-Client machine without interactive prompts:
-
-```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo env \
-  GOST_SERVER_HOST=YOUR_SERVER_IP_OR_DOMAIN \
-  GOST_AUTH_USER=gostuser \
-  GOST_AUTH_PASSWORD=CHANGE_ME_PASSWORD \
-  bash -s -- client
-```
-
-Interactive mode:
-
-```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo bash
-```
+Installation commands and options are documented in [CLI.md](CLI.md).
 
 The installer will:
 
@@ -491,26 +380,9 @@ GOST_TARGET_PORT      # default: 3360
 profile during one-line client installs. Additional profiles can be edited in
 `/etc/gost-thread/profiles.env`.
 
-You can override the repository URL:
-
-```bash
-curl -fsSL https://github.com/zwglass/gost_thread/raw/master/install.sh | sudo env GOST_THREAD_REPO=https://github.com/zwglass/gost_thread bash -s -- client
-```
-
 ### Local Install
 
-Run from a local clone on the target machine:
-
-```bash
-sudo ./scripts/install_gost.sh
-```
-
-Install only one role:
-
-```bash
-sudo ./scripts/install_gost.sh --role server
-sudo ./scripts/install_gost.sh --role client
-```
+Local installation commands are documented in [CLI.md](CLI.md).
 
 This copies config files to:
 
@@ -522,81 +394,6 @@ And service files to:
 
 ```text
 /etc/systemd/system/
-```
-
-## Start And Stop
-
-Server:
-
-```bash
-./scripts/start_server.sh
-./scripts/stop_server.sh
-```
-
-Client:
-
-```bash
-./scripts/start_client.sh
-./scripts/start_client.sh --pool luckypool --miner lpminer
-./scripts/start_client.sh --pool pearlhash --miner wildrig
-./scripts/stop_client.sh
-```
-
-Pearl Miners:
-
-```bash
-./scripts/start_pearl_miners.sh
-./scripts/start_pearl_miners.sh --pool luckypool --miner lpminer
-./scripts/start_pearl_miners.sh --pool alphapool --miner alpha-miner
-./scripts/start_pearl_miners.sh --pool pearlhash --miner wildrig
-./scripts/start_pearl_miners.sh --pool pearlfortune --miner pearlfortune
-./scripts/start_pearl_miners.sh --pool herominers --miner peakminer
-./scripts/start_pearl_miners.sh --pool kryptex --miner srbminer
-./scripts/stop_pearl_miners.sh
-```
-
-Status:
-
-```bash
-./scripts/status.sh
-```
-
-Direct systemd commands:
-
-```bash
-sudo systemctl start gost-server
-sudo systemctl stop gost-server
-sudo systemctl status gost-server
-
-sudo systemctl start gost-client
-sudo systemctl stop gost-client
-sudo systemctl status gost-client
-
-sudo systemctl start pearl-miner
-sudo systemctl stop pearl-miner
-sudo systemctl status pearl-miner
-```
-
-## Logs
-
-Use journalctl:
-
-```bash
-sudo journalctl -u gost-server -f
-sudo journalctl -u gost-client -f
-sudo journalctl -u pearl-miner -f
-```
-
-Recent Pearl miner logs:
-
-```bash
-sudo journalctl -u pearl-miner -n 50 --no-pager
-```
-
-## Uninstall
-
-```bash
-sudo ./scripts/uninstall.sh
 ```
 
 ## Nvidia GPU Power Limit
@@ -625,27 +422,7 @@ sudo nvidia-smi -i 0 -lmc 810
 sudo nvidia-smi -i 0 -rmc
 ```
 
-## 无 systemctl：直接运行管道与矿工
+## Direct Mode
 
-安装时可显式跳过 systemd（缺少 systemctl 时也会自动跳过）：
-
-```bash
-sudo ./scripts/install_gost.sh --no-systemd --role client
-sudo ./scripts/install_pearl_miners.sh --no-systemd onezerominer
-# 一键安装也支持：sudo bash install.sh client --no-systemd
-```
-
-准备好 `client.env` 中的中转服务器信息，以及 `profiles.env` 中的钱包与矿工参数后运行：
-
-```bash
-./scripts/run_pearl_miners_direct.sh --pool luckypool --miner lpminer
-# 使用独立配置目录（推荐与 systemd 并存时使用）：
-GOST_THREAD_CONFIG_DIR="$PWD/direct-config" \
-  ./scripts/run_pearl_miners_direct.sh --pool luckypool --miner lpminer
-```
-
-直接模式需要 Bash 4.3+ 和 `timeout`（通常由 coreutils 提供），在前台运行 GOST 客户端与矿工；Ctrl-C 或任一进程退出时清理本次启动的两个进程。配置先复制到临时目录，选矿池不会改写原配置，也不调用 systemctl。无参数时使用现有 `client.env` / `miner.env`。
-
-与已有服务并存时，请在独立配置中设置不同的 `LOCAL_LISTEN`；无参数运行时还需同步 `LOCAL_FORWARD`、`MINER_POOL` 和矿工地址参数。已被占用的本地矿池端口会拒绝启动。直接模式不支持需要修改主机 NAT 的 KRig；原 systemd KRig 流程保持原样。直接模式不提供自动重启或开机启动。
-
-`--no-systemd` 安装不会写入服务文件、重载或重启服务；直接安装保留已有配置；并存部署应设置独立的 `GOST_THREAD_CONFIG_DIR`，避免与服务共享端口。默认 systemd 安装与启动命令继续有效。
+Commands and requirements for running without systemd are documented in
+[CLI.md](CLI.md).

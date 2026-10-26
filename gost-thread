@@ -1,0 +1,1493 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${GOST_THREAD_PROFILES_FILE:-}" ]]; then
+  PROFILES_FILE="${GOST_THREAD_PROFILES_FILE}"
+  CONFIG_DIR="$(cd "$(dirname "${PROFILES_FILE}")" && pwd)"
+else
+  CONFIG_DIR="${GOST_THREAD_CONFIG_DIR:-${ROOT_DIR}/configs}"
+  PROFILES_FILE="${CONFIG_DIR}/profiles.env"
+fi
+MINERS_FILE="${GOST_THREAD_MINERS_FILE:-${CONFIG_DIR}/miners.env}"
+CLIENT_FILE="${CONFIG_DIR}/client.env"
+TEMP_FILE=""
+
+cleanup() {
+  if [[ -n "${TEMP_FILE}" ]]; then
+    rm -f "${TEMP_FILE}"
+  fi
+}
+trap cleanup EXIT
+
+die() {
+  echo "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<EOF
+Usage: $0 profiles <command> [options]
+
+Development commands (project configs):
+  list [--verbose]                     List project profiles.
+  show <profile>                       Show one profile and its miner args.
+  add <profile> [options]              Add a profile.
+  update <profile> [options]           Update profile metadata.
+  remove <profile> --miner <miner>     Remove one pool/miner combination.
+  remove-profile <profile>             Remove the whole pool profile.
+  set-args <profile> --miner <miner>   Set a miner argument array.
+  clear-args <profile> --miner <miner> Remove a miner argument array.
+  set-endpoint <profile> --miner <miner>
+                                       Set a miner-specific pool endpoint.
+  clear-endpoint <profile> --miner <miner>
+                                       Remove a miner-specific endpoint.
+  validate [profile]                   Validate profiles and related miners.
+  use <profile> [--miner <miner>]      Apply a profile to client/miner config.
+
+Deployment:
+  Run the same commands with GOST_THREAD_CONFIG_DIR=/etc/gost-thread.
+  Installation, service, KRig, and uninstall commands are listed in CLI.md.
+
+Common add/update options:
+  --target-host HOST
+  --target-port PORT
+  --miner NAME
+  --supported-miners "NAME..."
+  --wallet VALUE
+  --password VALUE
+
+Add/set-args options:
+  --arg VALUE                          Parse a shell-like argument expression.
+
+Add generates default <POOL>_<MINER>_ARGS for every supported miner.
+Explicit --arg values replace the default miner's generated arguments.
+Quotes and backslashes group or split arguments; commands are never executed.
+
+Update-only options:
+  --clear-wallet
+  --clear-password
+
+Aliases:
+  profile <command>
+  view [profile]
+  create, delete/rm, set-miner-args/unset-args
+  set-miner-endpoint/unset-endpoint, switch/apply
+
+The CLI reads and writes ${ROOT_DIR}/configs by default.
+Set GOST_THREAD_CONFIG_DIR=/etc/gost-thread to manage installed configs.
+EOF
+}
+
+profiles_usage() {
+  usage
+}
+
+require_profiles_file() {
+  [[ -f "${PROFILES_FILE}" ]] || \
+    die "Profiles file not found: ${PROFILES_FILE}"
+}
+
+require_mutable_profiles_file() {
+  require_profiles_file
+  [[ -w "${PROFILES_FILE}" ]] || \
+    die "Profiles file is not writable: ${PROFILES_FILE}"
+}
+
+load_profiles() {
+  require_profiles_file
+  # shellcheck source=/dev/null
+  if ! . "${PROFILES_FILE}"; then
+    die "Unable to load profiles file: ${PROFILES_FILE}"
+  fi
+}
+
+miner_ids() {
+  if [[ -f "${MINERS_FILE}" ]]; then
+    (
+      # shellcheck source=/dev/null
+      . "${MINERS_FILE}"
+      printf "%s" "${MINER_IDS:-}"
+    )
+  fi
+}
+
+validate_profile_name() {
+  local name="$1"
+  local canonical
+
+  [[ "${name}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || \
+    die "Invalid profile name: ${name}"
+  canonical="$(canonical_profile_name "${name}")"
+  case "${canonical}" in
+    default | local | worker | wallet | nockchain)
+      die "Reserved profile name: ${name}"
+      ;;
+  esac
+}
+
+validate_miner_name() {
+  local value="$1"
+
+  [[ "${value}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || \
+    die "Invalid miner name: ${value}"
+}
+
+validate_single_line() {
+  local label="$1"
+  local value="$2"
+
+  [[ "${value}" != *$'\n'* && "${value}" != *$'\r'* ]] || \
+    die "${label} must be a single line."
+}
+
+PARSED_ARG_WORDS=()
+
+parse_arg_expression() {
+  local expression="$1"
+  local state="unquoted"
+  local word=""
+  local started=0
+  local char
+  local next
+  local i
+  local length="${#expression}"
+
+  PARSED_ARG_WORDS=()
+  for ((i = 0; i < length; i++)); do
+    char="${expression:i:1}"
+    case "${state}" in
+      unquoted)
+        case "${char}" in
+          " " | $'\t' | $'\n')
+            if (( started == 1 )); then
+              PARSED_ARG_WORDS+=("${word}")
+              word=""
+              started=0
+            fi
+            ;;
+          "'")
+            state="single"
+            started=1
+            ;;
+          '"')
+            state="double"
+            started=1
+            ;;
+          "\\")
+            (( i + 1 < length )) || die "Trailing backslash in --arg value."
+            next="${expression:i+1:1}"
+            case "${next}" in
+              "'")
+                state="single"
+                ;;
+              '"')
+                state="double"
+                ;;
+              *)
+                word+="${next}"
+                ;;
+            esac
+            started=1
+            i=$((i + 1))
+            ;;
+          *)
+            word+="${char}"
+            started=1
+            ;;
+        esac
+        ;;
+      single)
+        if [[ "${char}" == "\\" && $((i + 1)) -lt "${length}" && \
+          "${expression:i+1:1}" == "'" ]]; then
+          state="unquoted"
+          i=$((i + 1))
+        elif [[ "${char}" == "'" ]]; then
+          state="unquoted"
+        else
+          word+="${char}"
+        fi
+        ;;
+      double)
+        if [[ "${char}" == '"' ]]; then
+          state="unquoted"
+        elif [[ "${char}" == "\\" && $((i + 1)) -lt "${length}" ]]; then
+          next="${expression:i+1:1}"
+          case "${next}" in
+            '"' | "\\" | '$' | '`')
+              word+="${next}"
+              i=$((i + 1))
+              ;;
+            *)
+              word+="${char}"
+              ;;
+          esac
+        else
+          word+="${char}"
+        fi
+        ;;
+    esac
+  done
+
+  [[ "${state}" == "unquoted" ]] || die "Unterminated quote in --arg value: ${expression}"
+  if (( started == 1 )); then
+    PARSED_ARG_WORDS+=("${word}")
+  elif [[ -z "${expression}" ]]; then
+    PARSED_ARG_WORDS+=("")
+  else
+    die "--arg value does not contain an argument: ${expression}"
+  fi
+}
+
+format_parsed_args_line() {
+  local word
+  local token
+  local line=""
+
+  for word in "${PARSED_ARG_WORDS[@]}"; do
+    if [[ "${word}" == -* && "${word}" =~ ^-[A-Za-z0-9_.:/@%+{},=-]+$ ]]; then
+      token="${word}"
+    else
+      token="$(quote_env_value "${word}")"
+    fi
+    line+="${line:+ }${token}"
+  done
+  printf "%s" "${line}"
+}
+
+validate_port() {
+  local port="$1"
+
+  [[ "${port}" =~ ^[0-9]{1,5}$ ]] || \
+    die "Port must be a number between 1 and 65535."
+  (( 10#${port} >= 1 && 10#${port} <= 65535 )) || \
+    die "Port must be between 1 and 65535."
+}
+
+canonical_profile_name() {
+  printf "%s" "$1" | tr "[:upper:]_" "[:lower:]-"
+}
+
+config_prefix() {
+  printf "%s" "$1" | tr "[:lower:]-" "[:upper:]_"
+}
+
+profile_names() {
+  sed -n 's/^\([A-Z0-9_][A-Z0-9_]*\)_DEFAULT_MINER=.*/\1/p' "${PROFILES_FILE}" \
+    | sort -u
+}
+
+profile_value() {
+  local prefix="$1"
+  local key="${prefix}_$2"
+
+  printf "%s" "${!key-}"
+}
+
+contains_word() {
+  local words="$1"
+  local wanted="$2"
+  local word
+
+  for word in ${words}; do
+    [[ "${word}" == "${wanted}" ]] && return 0
+  done
+  return 1
+}
+
+profile_exists() {
+  local prefix="$1"
+  local names
+
+  names="$(profile_names)"
+  [[ $'\n'"${names}"$'\n' == *$'\n'"${prefix}"$'\n'* ]]
+}
+
+prefix_exists_in_file() {
+  local prefix="$1"
+
+  grep -Eq "^${prefix}_[A-Za-z0-9_]*=" "${PROFILES_FILE}"
+}
+
+quote_env_value() {
+  local value="$1"
+
+  printf "'%s'" "${value//\'/\'\\\'\'}"
+}
+
+prepare_atomic_update() {
+  require_mutable_profiles_file
+  TEMP_FILE="$(mktemp "${PROFILES_FILE}.tmp.XXXXXX")"
+  cp -p "${PROFILES_FILE}" "${TEMP_FILE}"
+}
+
+commit_atomic_update() {
+  bash -n "${TEMP_FILE}" || die "Generated profiles file contains invalid shell syntax."
+  mv -f "${TEMP_FILE}" "${PROFILES_FILE}"
+  TEMP_FILE=""
+}
+
+validate_registered_miner() {
+  local miner="$1"
+  local ids
+
+  ids="$(miner_ids)"
+  if [[ -n "${ids}" ]] && ! contains_word "${ids}" "${miner}"; then
+    die "Miner is not listed in ${MINERS_FILE}: ${miner}"
+  fi
+}
+
+normalize_supported_miners() {
+  local value="$1"
+  local miner
+  local normalized=()
+
+  for miner in ${value}; do
+    validate_miner_name "${miner}"
+    validate_registered_miner "${miner}"
+    normalized+=("${miner}")
+  done
+  [[ "${#normalized[@]}" -gt 0 ]] || die "At least one supported miner is required."
+  printf "%s" "${normalized[*]}"
+}
+
+validate_profile_data() {
+  local prefix="$1"
+  local label="${2:-${prefix}}"
+  local target_host
+  local target_port
+  local default_miner
+  local supported_miners
+  local ids
+  local miner
+  local errors=0
+  local key
+  local declaration
+  local endpoint_host
+  local endpoint_port
+
+  target_host="$(profile_value "${prefix}" TARGET_HOST)"
+  target_port="$(profile_value "${prefix}" TARGET_PORT)"
+  default_miner="$(profile_value "${prefix}" DEFAULT_MINER)"
+  supported_miners="$(profile_value "${prefix}" SUPPORTED_MINERS)"
+  ids="$(miner_ids)"
+
+  [[ -n "${target_host}" ]] || {
+    echo "${label}: missing ${prefix}_TARGET_HOST" >&2
+    errors=$((errors + 1))
+  }
+  if [[ -z "${target_port}" ]] || [[ ! "${target_port}" =~ ^[0-9]{1,5}$ ]] || \
+    (( 10#${target_port:-0} < 1 || 10#${target_port:-0} > 65535 )); then
+    echo "${label}: invalid ${prefix}_TARGET_PORT" >&2
+    errors=$((errors + 1))
+  fi
+  [[ -n "${default_miner}" ]] || {
+    echo "${label}: missing ${prefix}_DEFAULT_MINER" >&2
+    errors=$((errors + 1))
+  }
+  [[ -n "${supported_miners}" ]] || {
+    echo "${label}: missing ${prefix}_SUPPORTED_MINERS" >&2
+    errors=$((errors + 1))
+  }
+  if [[ -n "${default_miner}" && -n "${supported_miners}" ]] && \
+    ! contains_word "${supported_miners}" "${default_miner}"; then
+    echo "${label}: default miner is not supported: ${default_miner}" >&2
+    errors=$((errors + 1))
+  fi
+
+  for miner in ${supported_miners}; do
+    if [[ ! "${miner}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then
+      echo "${label}: invalid miner name: ${miner}" >&2
+      errors=$((errors + 1))
+      continue
+    fi
+    if [[ -n "${ids}" ]] && ! contains_word "${ids}" "${miner}"; then
+      echo "${label}: miner is not listed in ${MINERS_FILE}: ${miner}" >&2
+      errors=$((errors + 1))
+    fi
+    key="${prefix}_$(config_prefix "${miner}")_ARGS"
+    endpoint_host="$(profile_value "${prefix}_$(config_prefix "${miner}")" TARGET_HOST)"
+    endpoint_port="$(profile_value "${prefix}_$(config_prefix "${miner}")" TARGET_PORT)"
+    if [[ -n "${endpoint_host}" || -n "${endpoint_port}" ]]; then
+      if [[ -z "${endpoint_host}" || -z "${endpoint_port}" ]]; then
+        echo "${label}: miner endpoint requires both target host and port: ${miner}" >&2
+        errors=$((errors + 1))
+      elif [[ ! "${endpoint_port}" =~ ^[0-9]{1,5}$ ]] || \
+        (( 10#${endpoint_port} < 1 || 10#${endpoint_port} > 65535 )); then
+        echo "${label}: invalid miner endpoint port: ${miner}" >&2
+        errors=$((errors + 1))
+      fi
+    fi
+    if declaration="$(declare -p "${key}" 2>/dev/null)"; then
+      if [[ "${declaration}" != "declare -a "* ]]; then
+        echo "${label}: ${key} is not an indexed array" >&2
+        errors=$((errors + 1))
+      else
+        eval "local arg_count=\${#${key}[@]}"
+        if (( arg_count == 0 )); then
+          echo "${label}: ${key} is empty" >&2
+          errors=$((errors + 1))
+        fi
+      fi
+    fi
+  done
+
+  return "${errors}"
+}
+
+print_miner_args() {
+  local prefix="$1"
+  local miner="$2"
+  local key="${prefix}_$(config_prefix "${miner}")_ARGS"
+  local count
+  local i
+
+  printf "Arguments [%s]: " "${miner}"
+  if ! declare -p "${key}" >/dev/null 2>&1; then
+    printf "built-in defaults\n"
+    return
+  fi
+  eval "count=\${#${key}[@]}"
+  printf "\n"
+  for ((i = 0; i < count; i++)); do
+    eval "printf '  %q\\n' \"\${${key}[${i}]}\""
+  done
+}
+
+cmd_list() {
+  local verbose=0
+  local prefix
+  local name
+  local target_host
+  local target_port
+  local default_miner
+  local supported_miners
+  local wallet
+
+  if [[ "${1:-}" == "--verbose" ]]; then
+    verbose=1
+  elif [[ "$#" -gt 0 ]]; then
+    die "Usage: $0 profiles list [--verbose]"
+  fi
+
+  load_profiles
+  if (( verbose == 1 )); then
+    printf '%-20s %-38s %-16s %-28s %s\n' \
+      "NAME" "TARGET" "DEFAULT MINER" "SUPPORTED MINERS" "WALLET"
+  else
+    printf '%-20s %-38s %-16s %s\n' \
+      "NAME" "TARGET" "DEFAULT MINER" "SUPPORTED MINERS"
+  fi
+
+  while IFS= read -r prefix; do
+    [[ -n "${prefix}" ]] || continue
+    name="$(canonical_profile_name "${prefix}")"
+    target_host="$(profile_value "${prefix}" TARGET_HOST)"
+    target_port="$(profile_value "${prefix}" TARGET_PORT)"
+    default_miner="$(profile_value "${prefix}" DEFAULT_MINER)"
+    supported_miners="$(profile_value "${prefix}" SUPPORTED_MINERS)"
+    wallet="$(profile_value "${prefix}" WALLET)"
+    if (( verbose == 1 )); then
+      printf '%-20s %-38s %-16s %-28s %s\n' \
+        "${name}" "${target_host}:${target_port}" "${default_miner}" \
+        "${supported_miners}" "${wallet:-inherited}"
+    else
+      printf '%-20s %-38s %-16s %s\n' \
+        "${name}" "${target_host}:${target_port}" "${default_miner}" \
+        "${supported_miners}"
+    fi
+  done < <(profile_names)
+}
+
+cmd_show() {
+  local name="${1:-}"
+  local prefix
+  local target_host
+  local target_port
+  local default_miner
+  local supported_miners
+  local wallet
+  local password
+  local miner
+  local miner_prefix
+  local endpoint_host
+  local endpoint_port
+
+  [[ -n "${name}" ]] || die "Usage: $0 profiles show <profile>"
+  validate_profile_name "${name}"
+  name="$(canonical_profile_name "${name}")"
+  prefix="$(config_prefix "${name}")"
+  load_profiles
+  profile_exists "${prefix}" || die "Profile not found: ${name}"
+
+  target_host="$(profile_value "${prefix}" TARGET_HOST)"
+  target_port="$(profile_value "${prefix}" TARGET_PORT)"
+  default_miner="$(profile_value "${prefix}" DEFAULT_MINER)"
+  supported_miners="$(profile_value "${prefix}" SUPPORTED_MINERS)"
+  wallet="$(profile_value "${prefix}" WALLET)"
+  password="$(profile_value "${prefix}" PASSWORD)"
+
+  printf 'Profile: %s\n' "${name}"
+  printf 'Target: %s:%s\n' "${target_host}" "${target_port}"
+  printf 'Default miner: %s\n' "${default_miner}"
+  printf 'Supported miners: %s\n' "${supported_miners:-none}"
+  printf 'Wallet: %s\n' "${wallet:-inherited}"
+  printf 'Password: %s\n' "$([[ -n "${password}" ]] && echo '<set>' || echo 'inherited')"
+  for miner in ${supported_miners}; do
+    validate_miner_name "${miner}"
+    miner_prefix="$(config_prefix "${miner}")"
+    endpoint_host="$(profile_value "${prefix}_${miner_prefix}" TARGET_HOST)"
+    endpoint_port="$(profile_value "${prefix}_${miner_prefix}" TARGET_PORT)"
+    if [[ -n "${endpoint_host}" || -n "${endpoint_port}" ]]; then
+      printf 'Endpoint [%s]: %s:%s\n' "${miner}" "${endpoint_host}" "${endpoint_port}"
+    fi
+    print_miner_args "${prefix}" "${miner}"
+  done
+}
+
+write_default_miner_args() {
+  local file="$1"
+  local prefix="$2"
+  local miner="$3"
+  local wallet="$4"
+  local password="$5"
+  local key="${prefix}_$(config_prefix "${miner}")_ARGS"
+  local wallet_ref='${WALLET_ADDRESS}'
+  local worker_ref='${WORKER_NAME}'
+  local password_ref='x'
+
+  if [[ -n "${wallet}" ]]; then
+    wallet_ref="\${${prefix}_WALLET}"
+  fi
+  if [[ -n "${password}" ]]; then
+    password_ref="\${${prefix}_PASSWORD}"
+  fi
+
+  {
+    printf '\n%s=(\n' "${key}"
+    case "${miner}" in
+      lpminer)
+        printf '  --algo pearl\n'
+        printf "  --pool 'stratum+tcp://{LOCAL_ADDRESS}'\n"
+        printf '  --wallet "%s"\n' "${wallet_ref}"
+        printf '  --worker "%s"\n' "${worker_ref}"
+        ;;
+      alpha-miner)
+        printf "  --pool 'stratum+tcp://{LOCAL_ADDRESS}'\n"
+        printf '  --address "%s"\n' "${wallet_ref}"
+        printf '  --worker "%s"\n' "${worker_ref}"
+        printf '  --password "%s"\n' "${password_ref}"
+        ;;
+      wildrig)
+        printf '  --algo pearl\n'
+        printf "  --url 'stratum+tcp://{LOCAL_ADDRESS}'\n"
+        printf '  --user "%s"\n' "${wallet_ref}"
+        printf '  --worker "%s"\n' "${worker_ref}"
+        ;;
+      pearlfortune)
+        printf "  --proxy '{LOCAL_ADDRESS}'\n"
+        printf '  --address "%s"\n' "${wallet_ref}"
+        printf '  --worker "%s"\n' "${worker_ref}"
+        printf '  -gpu\n'
+        ;;
+      peakminer)
+        printf "  --url '{LOCAL_ADDRESS}'\n"
+        printf '  --user "%s.%s"\n' "${wallet_ref}" "${worker_ref}"
+        ;;
+      srbminer)
+        printf '  --disable-cpu\n'
+        printf '  --algorithm pearlhash\n'
+        printf "  --pool '{LOCAL_ADDRESS}'\n"
+        printf '  --wallet "%s.%s"\n' "${wallet_ref}" "${worker_ref}"
+        printf '  --password "%s"\n' "${password_ref}"
+        ;;
+      krig-miner)
+        printf "  --url 'stratum+ssl://{TARGET_HOST}:{TARGET_PORT}'\n"
+        printf '  --user "%s/%s"\n' "${wallet_ref}" "${worker_ref}"
+        printf '  --password "%s"\n' "${password_ref}"
+        ;;
+      onezerominer)
+        printf '  --algo pearlhash\n'
+        printf "  --pool 'stratum+tcp://{LOCAL_ADDRESS}'\n"
+        printf '  --wallet "%s.%s"\n' "${wallet_ref}" "${worker_ref}"
+        ;;
+      *)
+        rm -f "${file}"
+        die "No default argument template for miner: ${miner}"
+        ;;
+    esac
+    printf ')\n'
+  } >>"${file}"
+}
+
+write_explicit_miner_args() {
+  local file="$1"
+  local prefix="$2"
+  local miner="$3"
+  local key="${prefix}_$(config_prefix "${miner}")_ARGS"
+  local line
+
+  shift 3
+  {
+    printf '\n%s=(\n' "${key}"
+    for line in "$@"; do
+      printf '  %s\n' "${line}"
+    done
+    printf ')\n'
+  } >>"${file}"
+}
+
+cmd_add() {
+  local name=""
+  local target_host=""
+  local target_port=""
+  local default_miner=""
+  local supported_miners=""
+  local wallet=""
+  local password=""
+  local prefix
+  local arg
+  local args=()
+  local arg_lines=()
+  local miner
+
+  if [[ "$#" -gt 0 && "$1" != --* ]]; then
+    name="$1"
+    shift
+  fi
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --target-host | --target-port | --miner | --default-miner | \
+        --supported-miners | --wallet | --password)
+        [[ "$#" -ge 2 ]] || die "Missing value for $1."
+        case "$1" in
+          --target-host) target_host="$2" ;;
+          --target-port) target_port="$2" ;;
+          --miner | --default-miner) default_miner="$2" ;;
+          --supported-miners) supported_miners="$2" ;;
+          --wallet) wallet="$2" ;;
+          --password) password="$2" ;;
+        esac
+        shift 2
+        ;;
+      --target-host=* | --target-port=* | --miner=* | --default-miner=* | \
+        --supported-miners=* | --wallet=* | --password=*)
+        case "$1" in
+          --target-host=*) target_host="${1#*=}" ;;
+          --target-port=*) target_port="${1#*=}" ;;
+          --miner=* | --default-miner=*) default_miner="${1#*=}" ;;
+          --supported-miners=*) supported_miners="${1#*=}" ;;
+          --wallet=*) wallet="${1#*=}" ;;
+          --password=*) password="${1#*=}" ;;
+        esac
+        shift
+        ;;
+      --arg | --miner-arg)
+        [[ "$#" -ge 2 ]] || die "Missing value for $1."
+        parse_arg_expression "$2"
+        args+=("${PARSED_ARG_WORDS[@]}")
+        arg_lines+=("$(format_parsed_args_line)")
+        shift 2
+        ;;
+      --arg=* | --miner-arg=*)
+        parse_arg_expression "${1#*=}"
+        args+=("${PARSED_ARG_WORDS[@]}")
+        arg_lines+=("$(format_parsed_args_line)")
+        shift
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown option for profiles add: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "${name}" ]] || \
+    die "Usage: $0 profiles add <profile> --target-host HOST --target-port PORT --miner NAME"
+  validate_profile_name "${name}"
+  name="$(canonical_profile_name "${name}")"
+  [[ -n "${target_host}" ]] || die "--target-host is required."
+  [[ "${target_host}" != *[[:space:]]* ]] || die "Target host must not contain whitespace."
+  [[ -n "${target_port}" ]] || die "--target-port is required."
+  validate_port "${target_port}"
+  target_port="$((10#${target_port}))"
+  [[ -n "${default_miner}" ]] || die "--miner is required."
+  validate_miner_name "${default_miner}"
+  validate_registered_miner "${default_miner}"
+  validate_single_line "Wallet" "${wallet}"
+  validate_single_line "Password" "${password}"
+  supported_miners="$(normalize_supported_miners "${supported_miners:-${default_miner}}")"
+  contains_word "${supported_miners}" "${default_miner}" || \
+    die "--supported-miners must include the default miner: ${default_miner}"
+  for arg in "${args[@]}"; do
+    validate_single_line "Miner argument" "${arg}"
+  done
+
+  prefix="$(config_prefix "${name}")"
+  require_profiles_file
+  prefix_exists_in_file "${prefix}" && die "Profile already exists: ${name}"
+
+  prepare_atomic_update
+  {
+    printf '\n# gost-thread profile: %s\n' "${name}"
+    printf '%s_TARGET_HOST=%s\n' "${prefix}" "$(quote_env_value "${target_host}")"
+    printf '%s_TARGET_PORT=%s\n' "${prefix}" "$(quote_env_value "${target_port}")"
+    printf '%s_DEFAULT_MINER=%s\n' "${prefix}" "$(quote_env_value "${default_miner}")"
+    printf '%s_SUPPORTED_MINERS=%s\n' "${prefix}" "$(quote_env_value "${supported_miners}")"
+    if [[ -n "${wallet}" ]]; then
+      printf '%s_WALLET=%s\n' "${prefix}" "$(quote_env_value "${wallet}")"
+    fi
+    if [[ -n "${password}" ]]; then
+      printf '%s_PASSWORD=%s\n' "${prefix}" "$(quote_env_value "${password}")"
+    fi
+  } >>"${TEMP_FILE}"
+  for miner in ${supported_miners}; do
+    if [[ "${miner}" == "${default_miner}" && "${#args[@]}" -gt 0 ]]; then
+      write_explicit_miner_args "${TEMP_FILE}" "${prefix}" "${miner}" "${arg_lines[@]}"
+    else
+      write_default_miner_args "${TEMP_FILE}" "${prefix}" "${miner}" "${wallet}" "${password}"
+    fi
+  done
+  commit_atomic_update
+  echo "Added profile: ${name}"
+  echo "Generated miner args: ${supported_miners}"
+}
+
+cmd_update() {
+  local name=""
+  local target_host=""
+  local target_port=""
+  local default_miner=""
+  local supported_miners=""
+  local wallet=""
+  local password=""
+  local target_host_set=0
+  local target_port_set=0
+  local default_miner_set=0
+  local supported_miners_set=0
+  local wallet_set=0
+  local password_set=0
+  local clear_wallet=0
+  local clear_password=0
+  local prefix
+  local current_host
+  local current_port
+  local current_default
+  local current_supported
+  local current_wallet
+  local current_password
+
+  if [[ "$#" -gt 0 && "$1" != --* ]]; then
+    name="$1"
+    shift
+  fi
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --target-host)
+        [[ "$#" -ge 2 ]] || die "Missing value for --target-host."
+        target_host_set=1
+        target_host="$2"
+        shift 2
+        ;;
+      --target-host=*) target_host_set=1; target_host="${1#*=}"; shift ;;
+      --target-port)
+        [[ "$#" -ge 2 ]] || die "Missing value for --target-port."
+        target_port_set=1
+        target_port="$2"
+        shift 2
+        ;;
+      --target-port=*) target_port_set=1; target_port="${1#*=}"; shift ;;
+      --miner | --default-miner)
+        [[ "$#" -ge 2 ]] || die "Missing value for $1."
+        default_miner_set=1
+        default_miner="$2"
+        shift 2
+        ;;
+      --miner=* | --default-miner=*)
+        default_miner_set=1
+        default_miner="${1#*=}"
+        shift
+        ;;
+      --supported-miners)
+        [[ "$#" -ge 2 ]] || die "Missing value for --supported-miners."
+        supported_miners_set=1
+        supported_miners="$2"
+        shift 2
+        ;;
+      --supported-miners=*) supported_miners_set=1; supported_miners="${1#*=}"; shift ;;
+      --wallet)
+        [[ "$#" -ge 2 ]] || die "Missing value for --wallet."
+        wallet_set=1
+        wallet="$2"
+        shift 2
+        ;;
+      --wallet=*) wallet_set=1; wallet="${1#*=}"; shift ;;
+      --password)
+        [[ "$#" -ge 2 ]] || die "Missing value for --password."
+        password_set=1
+        password="$2"
+        shift 2
+        ;;
+      --password=*) password_set=1; password="${1#*=}"; shift ;;
+      --clear-wallet) wallet_set=1; clear_wallet=1; shift ;;
+      --clear-password) password_set=1; clear_password=1; shift ;;
+      -h | --help) usage; exit 0 ;;
+      *) die "Unknown option for profiles update: $1" ;;
+    esac
+  done
+
+  [[ -n "${name}" ]] || die "Usage: $0 profiles update <profile> [options]"
+  validate_profile_name "${name}"
+  name="$(canonical_profile_name "${name}")"
+  prefix="$(config_prefix "${name}")"
+  load_profiles
+  profile_exists "${prefix}" || die "Profile not found: ${name}"
+
+  current_host="$(profile_value "${prefix}" TARGET_HOST)"
+  current_port="$(profile_value "${prefix}" TARGET_PORT)"
+  current_default="$(profile_value "${prefix}" DEFAULT_MINER)"
+  current_supported="$(profile_value "${prefix}" SUPPORTED_MINERS)"
+  current_wallet="$(profile_value "${prefix}" WALLET)"
+  current_password="$(profile_value "${prefix}" PASSWORD)"
+
+  (( target_host_set || target_port_set || default_miner_set || supported_miners_set || \
+    wallet_set || password_set )) || die "No update options supplied."
+  if (( ! target_host_set )); then target_host="${current_host}"; fi
+  if (( ! target_port_set )); then target_port="${current_port}"; fi
+  if (( ! default_miner_set )); then default_miner="${current_default}"; fi
+  if (( ! supported_miners_set )); then supported_miners="${current_supported}"; fi
+  if (( ! wallet_set )); then wallet="${current_wallet}"; fi
+  if (( ! password_set )); then password="${current_password}"; fi
+
+  [[ -n "${target_host}" ]] || die "Target host must not be empty."
+  [[ "${target_host}" != *[[:space:]]* ]] || die "Target host must not contain whitespace."
+  validate_port "${target_port}"
+  target_port="$((10#${target_port}))"
+  validate_miner_name "${default_miner}"
+  validate_registered_miner "${default_miner}"
+  supported_miners="$(normalize_supported_miners "${supported_miners}")"
+  contains_word "${supported_miners}" "${default_miner}" || \
+    die "--supported-miners must include the default miner: ${default_miner}"
+  if (( clear_wallet )); then wallet=""; fi
+  if (( clear_password )); then password=""; fi
+  validate_single_line "Target host" "${target_host}"
+  validate_single_line "Wallet" "${wallet}"
+  validate_single_line "Password" "${password}"
+
+  prepare_atomic_update
+  PROFILE_PREFIX="${prefix}" \
+  PROFILE_HOST_LINE="$(printf '%s_TARGET_HOST=%s' "${prefix}" "$(quote_env_value "${target_host}")")" \
+  PROFILE_PORT_LINE="$(printf '%s_TARGET_PORT=%s' "${prefix}" "$(quote_env_value "${target_port}")")" \
+  PROFILE_DEFAULT_LINE="$(printf '%s_DEFAULT_MINER=%s' "${prefix}" "$(quote_env_value "${default_miner}")")" \
+  PROFILE_SUPPORTED_LINE="$(printf '%s_SUPPORTED_MINERS=%s' "${prefix}" "$(quote_env_value "${supported_miners}")")" \
+  PROFILE_WALLET_LINE="$(if [[ -n "${wallet}" ]]; then printf '%s_WALLET=%s' "${prefix}" "$(quote_env_value "${wallet}")"; fi)" \
+  PROFILE_PASSWORD_LINE="$(if [[ -n "${password}" ]]; then printf '%s_PASSWORD=%s' "${prefix}" "$(quote_env_value "${password}")"; fi)" \
+  awk '
+    BEGIN {
+      prefix = ENVIRON["PROFILE_PREFIX"]
+      keys[1] = prefix "_TARGET_HOST"
+      keys[2] = prefix "_TARGET_PORT"
+      keys[3] = prefix "_DEFAULT_MINER"
+      keys[4] = prefix "_SUPPORTED_MINERS"
+      keys[5] = prefix "_WALLET"
+      keys[6] = prefix "_PASSWORD"
+      lines[1] = ENVIRON["PROFILE_HOST_LINE"]
+      lines[2] = ENVIRON["PROFILE_PORT_LINE"]
+      lines[3] = ENVIRON["PROFILE_DEFAULT_LINE"]
+      lines[4] = ENVIRON["PROFILE_SUPPORTED_LINE"]
+      lines[5] = ENVIRON["PROFILE_WALLET_LINE"]
+      lines[6] = ENVIRON["PROFILE_PASSWORD_LINE"]
+    }
+    {
+      equal = index($0, "=")
+      key = equal ? substr($0, 1, equal - 1) : ""
+      for (i = 1; i <= 6; i++) {
+        if (key == keys[i]) {
+          if (!seen[i] && lines[i] != "") print lines[i]
+          seen[i] = 1
+          next
+        }
+      }
+      print
+    }
+    END {
+      for (i = 1; i <= 6; i++) {
+        if (!seen[i] && lines[i] != "") print lines[i]
+      }
+    }
+  ' "${PROFILES_FILE}" >"${TEMP_FILE}"
+  commit_atomic_update
+  echo "Updated profile: ${name}"
+}
+
+cmd_remove() {
+  local name=""
+  local miner=""
+  local prefix
+  local miner_prefix
+  local supported
+  local default_miner
+  local current_miner
+  local remaining=()
+  local remaining_supported
+  local new_default
+  local support_key
+  local default_key
+  local support_line
+  local default_line
+
+  if [[ "$#" -gt 0 && "$1" != --* ]]; then
+    name="$1"
+    shift
+  fi
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --miner)
+        [[ "$#" -ge 2 ]] || die "Missing value for --miner."
+        miner="$2"
+        shift 2
+        ;;
+      --miner=*)
+        miner="${1#*=}"
+        shift
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown option for profiles remove: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "${name}" && -n "${miner}" ]] || \
+    die "Usage: $0 profiles remove <profile> --miner <miner>"
+  validate_profile_name "${name}"
+  validate_miner_name "${miner}"
+  name="$(canonical_profile_name "${name}")"
+  prefix="$(config_prefix "${name}")"
+  load_profiles
+  profile_exists "${prefix}" || die "Profile not found: ${name}"
+  supported="$(profile_value "${prefix}" SUPPORTED_MINERS)"
+  default_miner="$(profile_value "${prefix}" DEFAULT_MINER)"
+  contains_word "${supported}" "${miner}" || \
+    die "Profile ${name} does not support miner: ${miner}"
+
+  for current_miner in ${supported}; do
+    if [[ "${current_miner}" != "${miner}" ]]; then
+      remaining+=("${current_miner}")
+    fi
+  done
+
+  if [[ "${#remaining[@]}" -eq 0 ]]; then
+    cmd_remove_profile "${name}"
+    return
+  fi
+
+  remaining_supported="${remaining[*]}"
+  new_default="${default_miner}"
+  if [[ "${default_miner}" == "${miner}" ]]; then
+    new_default="${remaining[0]}"
+  fi
+  miner_prefix="$(config_prefix "${miner}")"
+  support_key="${prefix}_SUPPORTED_MINERS"
+  default_key="${prefix}_DEFAULT_MINER"
+  support_line="$(printf '%s=%s' "${support_key}" "$(quote_env_value "${remaining_supported}")")"
+  default_line="$(printf '%s=%s' "${default_key}" "$(quote_env_value "${new_default}")")"
+  prepare_atomic_update
+  REMOVE_MINER_SCOPE="${prefix}_$(config_prefix "${miner}")_" \
+  REMOVE_SUPPORT_KEY="${support_key}" \
+  REMOVE_DEFAULT_KEY="${default_key}" \
+  REMOVE_SUPPORT_LINE="${support_line}" \
+  REMOVE_DEFAULT_LINE="${default_line}" \
+  awk '
+      BEGIN {
+        scope = ENVIRON["REMOVE_MINER_SCOPE"]
+        support_key = ENVIRON["REMOVE_SUPPORT_KEY"]
+        default_key = ENVIRON["REMOVE_DEFAULT_KEY"]
+        in_array = 0
+      }
+      in_array {
+        if ($0 ~ /^[[:space:]]*\)[[:space:]]*(#.*)?$/) in_array = 0
+        next
+      }
+      index($0, scope) == 1 {
+        if ($0 ~ /^[A-Za-z0-9_]+=\(/ && $0 !~ /\)[[:space:]]*(#.*)?$/) {
+          in_array = 1
+        }
+        next
+      }
+      index($0, support_key "=") == 1 {
+        if (!seen_support) print ENVIRON["REMOVE_SUPPORT_LINE"]
+        seen_support = 1
+        next
+      }
+      index($0, default_key "=") == 1 {
+        if (!seen_default) print ENVIRON["REMOVE_DEFAULT_LINE"]
+        seen_default = 1
+        next
+      }
+      { print }
+      END {
+        if (!seen_support) print ENVIRON["REMOVE_SUPPORT_LINE"]
+        if (!seen_default) print ENVIRON["REMOVE_DEFAULT_LINE"]
+      }
+    ' "${PROFILES_FILE}" >"${TEMP_FILE}"
+  commit_atomic_update
+  echo "Removed miner from profile: ${name}/${miner}"
+  echo "Remaining miners: ${remaining_supported}"
+  echo "Default miner: ${new_default}"
+}
+
+cmd_remove_profile() {
+  local name="${1:-}"
+  local prefix
+
+  [[ -n "${name}" ]] || die "Usage: $0 profiles remove-profile <profile>"
+  validate_profile_name "${name}"
+  name="$(canonical_profile_name "${name}")"
+  prefix="$(config_prefix "${name}")"
+  require_profiles_file
+  prefix_exists_in_file "${prefix}" || die "Profile not found: ${name}"
+
+  prepare_atomic_update
+  awk \
+    -v prefix="${prefix}_" \
+    -v marker="# gost-thread profile: ${name}" '
+      BEGIN { in_array = 0 }
+      in_array {
+        if ($0 ~ /^[[:space:]]*\)[[:space:]]*(#.*)?$/) in_array = 0
+        next
+      }
+      $0 == marker { next }
+      index($0, prefix) == 1 {
+        if ($0 ~ /^[A-Za-z0-9_]+=\(/ && $0 !~ /\)[[:space:]]*(#.*)?$/) {
+          in_array = 1
+        }
+        next
+      }
+      { print }
+    ' "${PROFILES_FILE}" >"${TEMP_FILE}"
+  commit_atomic_update
+  echo "Removed profile: ${name}"
+}
+
+cmd_set_args() {
+  local name=""
+  local miner=""
+  local clear=0
+  local prefix
+  local supported
+  local key
+  local arg
+  local args=()
+  local arg_lines=()
+
+  if [[ "$#" -gt 0 && "$1" != --* ]]; then
+    name="$1"
+    shift
+  fi
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --miner)
+        [[ "$#" -ge 2 ]] || die "Missing value for --miner."
+        miner="$2"
+        shift 2
+        ;;
+      --miner=*)
+        miner="${1#*=}"
+        shift
+        ;;
+      --arg | --miner-arg)
+        [[ "$#" -ge 2 ]] || die "Missing value for $1."
+        parse_arg_expression "$2"
+        args+=("${PARSED_ARG_WORDS[@]}")
+        arg_lines+=("$(format_parsed_args_line)")
+        shift 2
+        ;;
+      --arg=* | --miner-arg=*)
+        parse_arg_expression "${1#*=}"
+        args+=("${PARSED_ARG_WORDS[@]}")
+        arg_lines+=("$(format_parsed_args_line)")
+        shift
+        ;;
+      --clear)
+        clear=1
+        shift
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown option for profiles set-args: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "${name}" && -n "${miner}" ]] || \
+    die "Usage: $0 profiles set-args <profile> --miner <miner> --arg VALUE..."
+  validate_profile_name "${name}"
+  validate_miner_name "${miner}"
+  name="$(canonical_profile_name "${name}")"
+  prefix="$(config_prefix "${name}")"
+  load_profiles
+  profile_exists "${prefix}" || die "Profile not found: ${name}"
+  supported="$(profile_value "${prefix}" SUPPORTED_MINERS)"
+  contains_word "${supported}" "${miner}" || \
+    die "Miner ${miner} is not supported by profile ${name}."
+  validate_registered_miner "${miner}"
+  if (( clear == 1 )); then
+    [[ "${#args[@]}" -eq 0 ]] || die "--clear cannot be combined with --arg."
+  else
+    [[ "${#args[@]}" -gt 0 ]] || die "Provide at least one --arg or use --clear."
+  fi
+  for arg in "${args[@]}"; do
+    validate_single_line "Miner argument" "${arg}"
+  done
+
+  key="${prefix}_$(config_prefix "${miner}")_ARGS"
+  prepare_atomic_update
+  awk -v key="${key}" '
+    BEGIN { in_array = 0 }
+    in_array {
+      if ($0 ~ /^[[:space:]]*\)[[:space:]]*(#.*)?$/) in_array = 0
+      next
+    }
+    index($0, key "=") == 1 {
+      if ($0 ~ /^[A-Za-z0-9_]+=\(/ && $0 !~ /\)[[:space:]]*(#.*)?$/) {
+        in_array = 1
+      }
+      next
+    }
+    { print }
+  ' "${PROFILES_FILE}" >"${TEMP_FILE}"
+  if (( clear == 0 )); then
+    {
+      printf '\n%s=(\n' "${key}"
+      for arg in "${arg_lines[@]}"; do
+        printf '  %s\n' "${arg}"
+      done
+      printf ')\n'
+    } >>"${TEMP_FILE}"
+  fi
+  commit_atomic_update
+  if (( clear == 1 )); then
+    echo "Cleared arguments: ${name}/${miner}"
+  else
+    echo "Updated arguments: ${name}/${miner}"
+  fi
+}
+
+cmd_set_endpoint() {
+  local name=""
+  local miner=""
+  local target_host=""
+  local target_port=""
+  local clear=0
+  local prefix
+  local supported
+  local miner_prefix
+  local host_key
+  local port_key
+
+  if [[ "$#" -gt 0 && "$1" != --* ]]; then
+    name="$1"
+    shift
+  fi
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --miner)
+        [[ "$#" -ge 2 ]] || die "Missing value for --miner."
+        miner="$2"
+        shift 2
+        ;;
+      --miner=*)
+        miner="${1#*=}"
+        shift
+        ;;
+      --target-host)
+        [[ "$#" -ge 2 ]] || die "Missing value for --target-host."
+        target_host="$2"
+        shift 2
+        ;;
+      --target-host=*)
+        target_host="${1#*=}"
+        shift
+        ;;
+      --target-port)
+        [[ "$#" -ge 2 ]] || die "Missing value for --target-port."
+        target_port="$2"
+        shift 2
+        ;;
+      --target-port=*)
+        target_port="${1#*=}"
+        shift
+        ;;
+      --clear)
+        clear=1
+        shift
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown option for profiles set-endpoint: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "${name}" && -n "${miner}" ]] || \
+    die "Usage: $0 profiles set-endpoint <profile> --miner <miner> --target-host HOST --target-port PORT"
+  validate_profile_name "${name}"
+  validate_miner_name "${miner}"
+  name="$(canonical_profile_name "${name}")"
+  prefix="$(config_prefix "${name}")"
+  load_profiles
+  profile_exists "${prefix}" || die "Profile not found: ${name}"
+  supported="$(profile_value "${prefix}" SUPPORTED_MINERS)"
+  contains_word "${supported}" "${miner}" || \
+    die "Miner ${miner} is not supported by profile ${name}."
+  validate_registered_miner "${miner}"
+  if (( clear == 1 )); then
+    [[ -z "${target_host}" && -z "${target_port}" ]] || \
+      die "--clear cannot be combined with endpoint values."
+  else
+    [[ -n "${target_host}" ]] || die "--target-host is required."
+    [[ "${target_host}" != *[[:space:]]* ]] || \
+      die "Target host must not contain whitespace."
+    [[ -n "${target_port}" ]] || die "--target-port is required."
+    validate_port "${target_port}"
+    target_port="$((10#${target_port}))"
+  fi
+
+  miner_prefix="$(config_prefix "${miner}")"
+  host_key="${prefix}_${miner_prefix}_TARGET_HOST"
+  port_key="${prefix}_${miner_prefix}_TARGET_PORT"
+  prepare_atomic_update
+  if (( clear == 1 )); then
+    grep -Ev "^(${host_key}|${port_key})=" "${PROFILES_FILE}" >"${TEMP_FILE}"
+  else
+    PROFILE_ENDPOINT_HOST_KEY="${host_key}" \
+    PROFILE_ENDPOINT_PORT_KEY="${port_key}" \
+    PROFILE_ENDPOINT_HOST_LINE="$(printf '%s=%s' "${host_key}" "$(quote_env_value "${target_host}")")" \
+    PROFILE_ENDPOINT_PORT_LINE="$(printf '%s=%s' "${port_key}" "$(quote_env_value "${target_port}")")" \
+    awk '
+      BEGIN {
+        keys[1] = ENVIRON["PROFILE_ENDPOINT_HOST_KEY"]
+        keys[2] = ENVIRON["PROFILE_ENDPOINT_PORT_KEY"]
+        lines[1] = ENVIRON["PROFILE_ENDPOINT_HOST_LINE"]
+        lines[2] = ENVIRON["PROFILE_ENDPOINT_PORT_LINE"]
+      }
+      {
+        equal = index($0, "=")
+        key = equal ? substr($0, 1, equal - 1) : ""
+        for (i = 1; i <= 2; i++) {
+          if (key == keys[i]) {
+            if (!seen[i]) print lines[i]
+            seen[i] = 1
+            next
+          }
+        }
+        print
+      }
+      END {
+        for (i = 1; i <= 2; i++) {
+          if (!seen[i]) print lines[i]
+        }
+      }
+    ' "${PROFILES_FILE}" >"${TEMP_FILE}"
+  fi
+  commit_atomic_update
+  if (( clear == 1 )); then
+    echo "Cleared endpoint: ${name}/${miner}"
+  else
+    echo "Updated endpoint: ${name}/${miner}"
+  fi
+}
+
+cmd_validate() {
+  local wanted="${1:-}"
+  local prefix
+  local name
+  local failures=0
+  local checked=0
+
+  [[ "$#" -le 1 ]] || die "Usage: $0 profiles validate [profile]"
+  load_profiles
+  if [[ -n "${wanted}" ]]; then
+    validate_profile_name "${wanted}"
+    name="$(canonical_profile_name "${wanted}")"
+    prefix="$(config_prefix "${name}")"
+    profile_exists "${prefix}" || die "Profile not found: ${name}"
+    if ! validate_profile_data "${prefix}" "${name}"; then
+      failures=$((failures + 1))
+    fi
+    checked=1
+  else
+    while IFS= read -r prefix; do
+      [[ -n "${prefix}" ]] || continue
+      name="$(canonical_profile_name "${prefix}")"
+      if ! validate_profile_data "${prefix}" "${name}"; then
+        failures=$((failures + 1))
+      fi
+      checked=$((checked + 1))
+    done < <(profile_names)
+  fi
+
+  (( checked > 0 )) || die "No profiles found in ${PROFILES_FILE}."
+  (( failures == 0 )) || die "Profile validation failed: ${failures} profile(s) with errors."
+  echo "Validated ${checked} profile(s): ${PROFILES_FILE}"
+}
+
+cmd_use() {
+  local name=""
+  local miner=""
+  local prefix
+  local supported
+  local default_miner
+  local target_host
+  local target_port
+  local extra_args=()
+
+  if [[ "$#" -gt 0 && "$1" != --* ]]; then
+    name="$1"
+    shift
+  fi
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --miner)
+        [[ "$#" -ge 2 ]] || die "Missing value for --miner."
+        miner="$2"
+        shift 2
+        ;;
+      --miner=*)
+        miner="${1#*=}"
+        shift
+        ;;
+      --miner-arg)
+        [[ "$#" -ge 2 ]] || die "Missing value for --miner-arg."
+        extra_args+=("$2")
+        shift 2
+        ;;
+      --miner-arg=*)
+        extra_args+=("${1#*=}")
+        shift
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown option for profiles use: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "${name}" ]] || die "Usage: $0 profiles use <profile> [--miner <miner>]"
+  validate_profile_name "${name}"
+  name="$(canonical_profile_name "${name}")"
+  prefix="$(config_prefix "${name}")"
+  load_profiles
+  profile_exists "${prefix}" || die "Profile not found: ${name}"
+  supported="$(profile_value "${prefix}" SUPPORTED_MINERS)"
+  default_miner="$(profile_value "${prefix}" DEFAULT_MINER)"
+  target_host="$(profile_value "${prefix}" TARGET_HOST)"
+  target_port="$(profile_value "${prefix}" TARGET_PORT)"
+  miner="${miner:-${default_miner}}"
+  validate_miner_name "${miner}"
+  contains_word "${supported}" "${miner}" || \
+    die "Miner ${miner} is not supported by profile ${name}."
+  validate_registered_miner "${miner}"
+  [[ -n "${target_host}" ]] || die "Profile has no target host: ${name}"
+  validate_port "${target_port}"
+  [[ -f "${CLIENT_FILE}" ]] || die "Missing related config: ${CLIENT_FILE}"
+  [[ -f "${MINERS_FILE}" ]] || die "Missing related config: ${MINERS_FILE}"
+
+  GOST_THREAD_CONFIG_DIR="${CONFIG_DIR}" \
+  GOST_THREAD_RESTART_SERVICES="${GOST_THREAD_RESTART_SERVICES:-0}" \
+  GOST_THREAD_MANAGE_KRIG_REDIRECT="${GOST_THREAD_MANAGE_KRIG_REDIRECT:-0}" \
+    "${ROOT_DIR}/scripts/switch_profile.sh" \
+    --pool "${name}" --miner "${miner}" "${extra_args[@]}"
+}
+
+main() {
+  local command="${1:-}"
+  local subcommand
+
+  if [[ -z "${command}" || "${command}" == "-h" || "${command}" == "--help" ]]; then
+    usage
+    return 0
+  fi
+  case "${command}" in
+    profile | profiles) ;;
+    *)
+      die "Unknown command: ${command}
+Run '$0 --help' for usage."
+      ;;
+  esac
+
+  shift
+  subcommand="${1:-}"
+  if [[ -z "${subcommand}" || "${subcommand}" == "-h" || "${subcommand}" == "--help" ]]; then
+    profiles_usage
+    return 0
+  fi
+  shift
+
+  case "${subcommand}" in
+    list)
+      cmd_list "$@"
+      ;;
+    show)
+      [[ "$#" -le 1 ]] || die "Usage: $0 profiles show <profile>"
+      cmd_show "${1:-}"
+      ;;
+    view)
+      [[ "$#" -le 1 ]] || die "Usage: $0 profiles view [profile]"
+      if [[ "$#" -eq 0 ]]; then cmd_list; else cmd_show "$1"; fi
+      ;;
+    add | create)
+      cmd_add "$@"
+      ;;
+    update)
+      cmd_update "$@"
+      ;;
+    remove | delete | rm)
+      cmd_remove "$@"
+      ;;
+    remove-profile | delete-profile | remove-pool)
+      [[ "$#" -eq 1 ]] || die "Usage: $0 profiles remove-profile <profile>"
+      cmd_remove_profile "$1"
+      ;;
+    set-args | set-miner-args)
+      cmd_set_args "$@"
+      ;;
+    clear-args | unset-args)
+      cmd_set_args "$@" --clear
+      ;;
+    set-endpoint | set-miner-endpoint)
+      cmd_set_endpoint "$@"
+      ;;
+    clear-endpoint | unset-endpoint)
+      cmd_set_endpoint "$@" --clear
+      ;;
+    validate)
+      cmd_validate "$@"
+      ;;
+    use | switch | apply)
+      cmd_use "$@"
+      ;;
+    *)
+      die "Unknown profiles command: ${subcommand}
+Run '$0 profiles --help' for usage."
+      ;;
+  esac
+}
+
+main "$@"

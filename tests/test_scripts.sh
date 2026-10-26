@@ -102,7 +102,7 @@ test_switch_profile_and_runner() {
   . "${config_dir}/profiles.env"
   . "${config_dir}/client.env"
   assert_equals pearlhash "${MINER_ARG_1}" "PearlHash OneZeroMiner algorithm"
-  assert_equals 127.0.0.1:3333 "${MINER_ARG_3}" "PearlHash OneZeroMiner local pool"
+  assert_equals stratum+tcp://127.0.0.1:3333 "${MINER_ARG_3}" "PearlHash OneZeroMiner local pool"
   assert_equals "${WALLET_ADDRESS}" "${MINER_ARG_5}" "PearlHash OneZeroMiner wallet"
   assert_equals --worker "${MINER_ARG_6}" "PearlHash OneZeroMiner worker option"
   assert_equals "${WORKER_NAME}" "${MINER_ARG_7}" "PearlHash OneZeroMiner worker"
@@ -114,7 +114,7 @@ test_switch_profile_and_runner() {
   . "${config_dir}/profiles.env"
   . "${config_dir}/client.env"
   assert_equals pearlhash "${MINER_ARG_1}" "OneZeroMiner algorithm"
-  assert_equals 127.0.0.1:3333 "${MINER_ARG_3}" "OneZeroMiner local pool"
+  assert_equals stratum+tcp://127.0.0.1:3333 "${MINER_ARG_3}" "OneZeroMiner local pool"
   assert_equals "${WALLET_ADDRESS}.${WORKER_NAME}" "${MINER_ARG_5}" "OneZeroMiner username"
   assert_equals "tcp://127.0.0.1:3333/prl-eu.kryptex.network:7048" "${LOCAL_FORWARD}" "OneZeroMiner GOST forward"
 
@@ -206,6 +206,224 @@ test_krig_gost_redirect_help() {
 
   output="$("${ROOT_DIR}/scripts/krig_gost_redirect.sh" --help)"
   [[ "${output}" == *"<enable|disable|status>"* ]] || fail "KRig redirect usage is missing commands"
+}
+
+test_profile_cli() {
+  local config_dir="${TEST_ROOT}/cli-config"
+  local output
+  local password="pa'ss\\word"
+  local test_wallet="wallet value"
+  local test_worker="worker value"
+
+  mkdir -p "${config_dir}"
+  cp "${ROOT_DIR}/configs/client.env" \
+    "${ROOT_DIR}/configs/miner.env" \
+    "${ROOT_DIR}/configs/miners.env" \
+    "${ROOT_DIR}/configs/profiles.env" \
+    "${config_dir}/"
+
+  output="$("${ROOT_DIR}/gost-thread" profiles validate luckypool)"
+  [[ "${output}" == *"Validated 1 profile"* ]] || \
+    fail "CLI did not default to the project profiles file"
+
+  output="$(GOST_THREAD_CONFIG_DIR="${config_dir}" "${ROOT_DIR}/gost-thread" profiles list)"
+  [[ "${output}" == *"luckypool"* ]] || fail "profile list omitted luckypool"
+  [[ "${output}" == *"kryptex"* ]] || fail "profile list omitted kryptex"
+  if [[ "${output}" == *"kryptex-krig-miner"* ]]; then
+    fail "profile list included a miner-specific endpoint as a pool"
+  fi
+
+  output="$(GOST_THREAD_CONFIG_DIR="${config_dir}" "${ROOT_DIR}/gost-thread" profiles show luckypool)"
+  [[ "${output}" == *"pearl-eu1.luckypool.io:3360"* ]] || fail "profile show omitted target"
+  [[ "${output}" == *"Arguments [lpminer]"* ]] || fail "profile show omitted miner args"
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles add fortune-test \
+    --target-host global.pearlfortune.org \
+    --target-port 8888 \
+    --miner pearlfortune >/dev/null
+  # shellcheck source=/dev/null
+  . "${config_dir}/profiles.env"
+  assert_equals "--proxy" "${FORTUNE_TEST_PEARLFORTUNE_ARGS[0]}" \
+    "CLI-generated PearlFortune option"
+  assert_equals "{LOCAL_ADDRESS}" "${FORTUNE_TEST_PEARLFORTUNE_ARGS[1]}" \
+    "CLI-generated PearlFortune proxy"
+  assert_equals "-gpu" "${FORTUNE_TEST_PEARLFORTUNE_ARGS[6]}" \
+    "CLI-generated PearlFortune GPU option"
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles remove fortune-test --miner pearlfortune >/dev/null
+  if grep -q '^FORTUNE_TEST_' "${config_dir}/profiles.env"; then
+    fail "removing the last miner did not remove the pool profile"
+  fi
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles add escape-test \
+    --target-host global.pearlfortune.org \
+    --target-port 8888 \
+    --miner pearlfortune \
+    --supported-miners pearlfortune \
+    --arg "--proxy \'{LOCAL_ADDRESS}\'" \
+    --arg "--address \"${test_wallet}\"" \
+    --arg "--worker \"${test_worker}\"" \
+    --arg="-gpu" >/dev/null
+  # shellcheck source=/dev/null
+  . "${config_dir}/profiles.env"
+  assert_equals 7 "${#ESCAPE_TEST_PEARLFORTUNE_ARGS[@]}" \
+    "CLI escaped argument count"
+  assert_equals "--proxy" "${ESCAPE_TEST_PEARLFORTUNE_ARGS[0]}" \
+    "CLI escaped option"
+  assert_equals "{LOCAL_ADDRESS}" "${ESCAPE_TEST_PEARLFORTUNE_ARGS[1]}" \
+    "CLI escaped single-quoted value"
+  assert_equals "wallet value" "${ESCAPE_TEST_PEARLFORTUNE_ARGS[3]}" \
+    "CLI escaped double-quoted value"
+  assert_equals "worker value" "${ESCAPE_TEST_PEARLFORTUNE_ARGS[5]}" \
+    "CLI escaped worker value"
+  grep -Fq "  --proxy '{LOCAL_ADDRESS}'" "${config_dir}/profiles.env" || \
+    fail "CLI did not keep the proxy option and value on one line"
+  grep -Fq "  --address 'wallet value'" "${config_dir}/profiles.env" || \
+    fail "CLI did not keep the address option and value on one line"
+  grep -Fq "  --worker 'worker value'" "${config_dir}/profiles.env" || \
+    fail "CLI did not keep the worker option and value on one line"
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles remove-profile escape-test >/dev/null
+  if grep -q '^ESCAPE_TEST_' "${config_dir}/profiles.env"; then
+    fail "remove-profile left profile entries behind"
+  fi
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles add testpool \
+    --target-host pool.example.com \
+    --target-port 4321 \
+    --miner srbminer \
+    --supported-miners "srbminer peakminer" \
+    --wallet "wallet with spaces" \
+    --password "${password}" \
+    --arg=--algorithm \
+    --arg=pearlhash >/dev/null
+
+  # shellcheck source=/dev/null
+  . "${config_dir}/profiles.env"
+  assert_equals "pool.example.com" "${TESTPOOL_TARGET_HOST}" "CLI profile target host"
+  assert_equals "4321" "${TESTPOOL_TARGET_PORT}" "CLI profile target port"
+  assert_equals "srbminer peakminer" "${TESTPOOL_SUPPORTED_MINERS}" "CLI profile supported miners"
+  assert_equals "wallet with spaces" "${TESTPOOL_WALLET}" "CLI profile wallet"
+  assert_equals "${password}" "${TESTPOOL_PASSWORD}" "CLI profile password"
+  assert_equals "--algorithm" "${TESTPOOL_SRBMINER_ARGS[0]}" "CLI profile miner option"
+  assert_equals "pearlhash" "${TESTPOOL_SRBMINER_ARGS[1]}" "CLI profile miner argument"
+  assert_equals "--url" "${TESTPOOL_PEAKMINER_ARGS[0]}" \
+    "CLI-generated additional miner option"
+  assert_equals "wallet with spaces.rtx3090" "${TESTPOOL_PEAKMINER_ARGS[3]}" \
+    "CLI-generated additional miner user"
+
+  output="$(GOST_THREAD_CONFIG_DIR="${config_dir}" "${ROOT_DIR}/gost-thread" profiles show testpool)"
+  [[ "${output}" == *"Password: <set>"* ]] || fail "profile show did not report the profile password"
+  if [[ "${output}" == *"${password}"* ]]; then
+    fail "profile show exposed the profile password"
+  fi
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles update testpool \
+    --target-host updated.example.com \
+    --target-port 5555 >/dev/null
+  # shellcheck source=/dev/null
+  . "${config_dir}/profiles.env"
+  assert_equals "updated.example.com" "${TESTPOOL_TARGET_HOST}" "CLI updated profile host"
+  assert_equals "5555" "${TESTPOOL_TARGET_PORT}" "CLI updated profile port"
+  assert_equals "wallet with spaces" "${TESTPOOL_WALLET}" "CLI update preserved wallet"
+  assert_equals "${password}" "${TESTPOOL_PASSWORD}" "CLI update preserved password"
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles set-args testpool \
+    --miner peakminer \
+    --arg=--url \
+    --arg='{LOCAL_ADDRESS}' >/dev/null
+  # shellcheck source=/dev/null
+  . "${config_dir}/profiles.env"
+  assert_equals "--url" "${TESTPOOL_PEAKMINER_ARGS[0]}" "CLI peakminer option"
+  assert_equals "{LOCAL_ADDRESS}" "${TESTPOOL_PEAKMINER_ARGS[1]}" "CLI peakminer placeholder"
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles set-endpoint testpool \
+    --miner peakminer \
+    --target-host override.example.com \
+    --target-port 4444 >/dev/null
+  # shellcheck source=/dev/null
+  . "${config_dir}/profiles.env"
+  assert_equals "override.example.com" "${TESTPOOL_PEAKMINER_TARGET_HOST}" \
+    "CLI peakminer endpoint host"
+  assert_equals "4444" "${TESTPOOL_PEAKMINER_TARGET_PORT}" \
+    "CLI peakminer endpoint port"
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles validate testpool >/dev/null
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles use testpool --miner peakminer >/dev/null
+  # shellcheck source=/dev/null
+  . "${config_dir}/miner.env"
+  # shellcheck source=/dev/null
+  . "${config_dir}/client.env"
+  assert_equals "testpool" "${ACTIVE_POOL}" "CLI active pool"
+  assert_equals "peakminer" "${ACTIVE_MINER}" "CLI active miner"
+  assert_equals "127.0.0.1:3333" "${MINER_ARG_1}" "CLI applied miner argument"
+  assert_equals "tcp://127.0.0.1:3333/override.example.com:4444" "${LOCAL_FORWARD}" \
+    "CLI applied miner endpoint"
+
+  if GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles add testpool \
+    --target-host duplicate.example.com \
+    --target-port 1234 \
+    --miner srbminer >/dev/null 2>&1; then
+    fail "duplicate profile was accepted"
+  fi
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles clear-args testpool --miner peakminer >/dev/null
+  if grep -q '^TESTPOOL_PEAKMINER_ARGS=' "${config_dir}/profiles.env"; then
+    fail "profile clear-args left the argument array behind"
+  fi
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles clear-endpoint testpool --miner peakminer >/dev/null
+  if grep -Eq '^TESTPOOL_PEAKMINER_TARGET_(HOST|PORT)=' "${config_dir}/profiles.env"; then
+    fail "profile clear-endpoint left the endpoint behind"
+  fi
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles delete testpool --miner srbminer >/dev/null
+  grep -q '^TESTPOOL_TARGET_HOST=' "${config_dir}/profiles.env" || \
+    fail "removing one miner removed the whole pool profile"
+  if grep -q '^TESTPOOL_SRBMINER_ARGS=' "${config_dir}/profiles.env"; then
+    fail "removing one miner left its argument array behind"
+  fi
+  # shellcheck source=/dev/null
+  . "${config_dir}/profiles.env"
+  assert_equals "peakminer" "${TESTPOOL_DEFAULT_MINER}" \
+    "profile default miner after removing the default miner"
+  assert_equals "peakminer" "${TESTPOOL_SUPPORTED_MINERS}" \
+    "profile supported miners after removing one miner"
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles remove testpool --miner peakminer >/dev/null
+  if grep -Eq '^TESTPOOL_[A-Za-z0-9_]*=' "${config_dir}/profiles.env"; then
+    fail "removing the last miner left profile variables behind"
+  fi
+  grep -q '^LUCKYPOOL_TARGET_HOST=' "${config_dir}/profiles.env" || \
+    fail "profile remove changed unrelated profiles"
+
+  if GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles add invalid \
+    --target-host pool.example.com \
+    --target-port 70000 \
+    --miner srbminer >/dev/null 2>&1; then
+    fail "invalid profile port was accepted"
+  fi
+
+  if GOST_THREAD_CONFIG_DIR="${config_dir}" \
+    "${ROOT_DIR}/gost-thread" profiles add invalid \
+    --target-host pool.example.com \
+    --target-port 3333 \
+    --miner missing-miner >/dev/null 2>&1; then
+    fail "unregistered miner was accepted"
+  fi
 }
 
 test_github_install_and_update() {
@@ -395,5 +613,6 @@ require_command curl
 require_command tar
 test_switch_profile_and_runner
 test_krig_gost_redirect_help
+test_profile_cli
 test_github_install_and_update
 echo "All script tests passed."
