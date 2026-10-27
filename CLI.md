@@ -245,6 +245,9 @@ sudo ./scripts/install_pearl_miners.sh --update wildrig onezerominer
 sudo ./scripts/install_pearl_miners.sh --all --update
 sudo ./scripts/install_pearl_miners.sh --replace-config --all
 sudo ./scripts/install_pearl_miners.sh --no-systemd onezerominer
+
+# 走代理安装
+sudo --preserve-env=http_proxy,https_proxy,all_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY ./scripts/install_pearl_miners.sh --all --update
 ```
 
 | 参数 | 说明 |
