@@ -255,11 +255,75 @@ github_api_get() {
   curl "${curl_args[@]}" "${url}" -o "${output_file}"
 }
 
-resolve_latest_github_release() {
+select_github_asset() {
   local repo="$1"
   local asset_regex="$2"
   local json_file="$3"
   local match_count
+  local asset_name
+  local index
+  local selection
+
+  match_count="$(jq --arg regex "${asset_regex}" '[.assets[] | select(.name | test($regex))] | length' "${json_file}")"
+  if [[ "${match_count}" -eq 0 ]]; then
+    echo "No Linux asset for ${repo} matched regex: ${asset_regex}"
+    echo "Release assets:"
+    jq -r '.assets[].name | "  " + .' "${json_file}"
+    return 1
+  fi
+
+  if [[ "${match_count}" -eq 1 ]]; then
+    index=1
+  else
+    echo "Regex matched ${match_count} Linux assets for ${repo}: ${asset_regex}"
+    index=1
+    while IFS= read -r asset_name; do
+      printf "  %d) %s\n" "${index}" "${asset_name}"
+      index=$((index + 1))
+    done < <(jq -r --arg regex "${asset_regex}" '.assets[] | select(.name | test($regex)) | .name' "${json_file}")
+
+    while true; do
+      printf "Select an asset [1-%d], or q to cancel: " "${match_count}"
+      if [[ -t 0 ]]; then
+        if ! IFS= read -r selection; then
+          echo
+          echo "No asset was selected."
+          return 1
+        fi
+      elif [[ -r /dev/tty ]]; then
+        if ! IFS= read -r selection </dev/tty; then
+          echo
+          echo "No asset was selected."
+          return 1
+        fi
+      else
+        echo
+        echo "Multiple assets matched, but no terminal is available for a selection."
+        echo "Narrow the ASSET_REGEX or run the installer in an interactive terminal."
+        return 1
+      fi
+
+      if [[ "${selection}" == "q" || "${selection}" == "Q" ]]; then
+        echo "No asset was selected."
+        return 1
+      fi
+      if [[ "${selection}" =~ ^[1-9][0-9]*$ ]] && (( selection >= 1 && selection <= match_count )); then
+        index="${selection}"
+        break
+      fi
+      echo "Invalid selection: ${selection}"
+    done
+  fi
+
+  GITHUB_ASSET_NAME="$(jq -er --arg regex "${asset_regex}" --argjson index "${index}" '[.assets[] | select(.name | test($regex))] | .[$index - 1].name' "${json_file}")"
+  GITHUB_ASSET_URL="$(jq -er --arg regex "${asset_regex}" --argjson index "${index}" '[.assets[] | select(.name | test($regex))] | .[$index - 1].browser_download_url' "${json_file}")"
+  GITHUB_ASSET_DIGEST="$(jq -r --arg regex "${asset_regex}" --argjson index "${index}" '[.assets[] | select(.name | test($regex))] | .[$index - 1] | (.digest // "")' "${json_file}")"
+}
+
+resolve_latest_github_release() {
+  local repo="$1"
+  local asset_regex="$2"
+  local json_file="$3"
 
   echo "Checking latest stable GitHub Release: ${repo}"
   if ! github_api_get "${GITHUB_API_BASE}/repos/${repo}/releases/latest" "${json_file}"; then
@@ -271,17 +335,9 @@ resolve_latest_github_release() {
     echo "GitHub response for ${repo} does not contain tag_name."
     return 1
   }
-  match_count="$(jq --arg regex "${asset_regex}" '[.assets[] | select(.name | test($regex))] | length' "${json_file}")"
-  if [[ "${match_count}" != "1" ]]; then
-    echo "Expected exactly one Linux asset for ${repo}, but regex matched ${match_count}: ${asset_regex}"
-    echo "Release assets:"
-    jq -r '.assets[].name | "  " + .' "${json_file}"
+  if ! select_github_asset "${repo}" "${asset_regex}" "${json_file}"; then
     return 1
   fi
-
-  GITHUB_ASSET_NAME="$(jq -r --arg regex "${asset_regex}" '.assets[] | select(.name | test($regex)) | .name' "${json_file}")"
-  GITHUB_ASSET_URL="$(jq -r --arg regex "${asset_regex}" '.assets[] | select(.name | test($regex)) | .browser_download_url' "${json_file}")"
-  GITHUB_ASSET_DIGEST="$(jq -r --arg regex "${asset_regex}" '.assets[] | select(.name | test($regex)) | (.digest // "")' "${json_file}")"
 }
 
 read_installed_release_value() {

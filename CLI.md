@@ -248,6 +248,7 @@ sudo ./scripts/install_pearl_miners.sh --no-systemd onezerominer
 
 # 走代理安装
 sudo --preserve-env=http_proxy,https_proxy,all_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,ALL_PROXY,NO_PROXY ./scripts/install_pearl_miners.sh --all --update
+# 使用 env | grep -iE '^(http|https|all|no)_proxy=' 这个命令，能看到正确的代理地址才能使用上面的代理命令
 ```
 
 | 参数 | 说明 |
