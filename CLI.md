@@ -314,6 +314,7 @@ sudo ./scripts/switch_profile.sh \
 ```bash
 ./scripts/start_client.sh --pool luckypool --miner lpminer
 ./scripts/start_pearl_miners.sh --pool kryptex --miner srbminer
+./scripts/start_pearl_miners.sh --pool peryn --miner onezerominer
 ```
 
 `stop_pearl_miners.sh` 会停止并禁用矿工服务。

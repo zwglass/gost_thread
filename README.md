@@ -212,14 +212,46 @@ The resulting path is:
 wildrig-multi -> 127.0.0.1:3333 -> gost-client.service -> pool.pearlhash.xyz:9000
 ```
 
-The `pearlhash` pool also supports OneZeroMiner with `--algo pearlhash`,
-a separate `--wallet` and `--worker`, and `--pass x`. It connects through the
-same local GOST tunnel to `pool.pearlhash.xyz:9000`.
+The `peryn` profile uses
+[OneZeroMiner](https://github.com/OneZeroMiner/onezerominer/releases) with
+Peryn's documented `PearlHash` command shape:
 
-For an existing installation, merge `PEARLHASH_SUPPORTED_MINERS` and
-`PEARLHASH_ONEZEROMINER_ARGS` from `configs/profiles.env` into
-`/etc/gost-thread/profiles.env`, along with the OneZeroMiner entries in
-`miners.env` if they have not already been added.
+```bash
+onezerominer \
+  --algo pearlhash \
+  --pool stratum+tcp://pool.peryn.ai:3333 \
+  --wallet <pearl-address> \
+  --worker <worker-name> \
+  --pass x
+```
+
+In this project the miner connects through the local GOST tunnel:
+
+```bash
+${PEARL_MINERS_DIR}/onezerominer/onezerominer \
+  --algo pearlhash \
+  --pool stratum+tcp://127.0.0.1:3333 \
+  --wallet prl1p22pq5hnskyrpysvtx8yqayq8vurrrfu0jzmyeqtjxs7r75k8jvuqpqspma \
+  --worker rtx3090 \
+  --pass x
+```
+
+The resulting path is:
+
+```text
+onezerominer -> 127.0.0.1:3333 -> gost-client.service -> pool.peryn.ai:3333
+```
+
+Select it with:
+
+```bash
+sudo ./scripts/start_pearl_miners.sh --pool peryn --miner onezerominer
+```
+
+Peryn also publishes regional hosts such as `hk.pool.peryn.ai` and
+`singapore.pool.peryn.ai`. Change the target through the profile endpoint
+settings when a closer region is required; the onezerominer arguments continue
+to use the local GOST address.
 
 The `pearlfortune` pool follows the CUDA command shape from
 https://github.com/pearlfortune/pearl-miner. The installer selects the stable

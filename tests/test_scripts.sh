@@ -84,29 +84,33 @@ test_switch_profile_and_runner() {
     "luckypool lpminer" \
     "alphapool alpha-miner" \
     "pearlhash wildrig" \
-    "pearlhash onezerominer" \
     "pearlfortune pearlfortune" \
     "herominers peakminer" \
     "kryptex onezerominer" \
     "kryptex srbminer" \
     "kryptex peakminer" \
-    "kryptex krig-miner"; do
+    "kryptex krig-miner" \
+    "peryn onezerominer"; do
     read -r pool miner <<<"${selection}"
     GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
       "${ROOT_DIR}/scripts/switch_profile.sh" --pool "${pool}" --miner "${miner}" >/dev/null
   done
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
-    "${ROOT_DIR}/scripts/switch_profile.sh" --pool pearlhash --miner onezerominer >/dev/null
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool peryn >/dev/null
   . "${config_dir}/miner.env"
   . "${config_dir}/profiles.env"
   . "${config_dir}/client.env"
-  assert_equals pearlhash "${MINER_ARG_1}" "PearlHash OneZeroMiner algorithm"
-  assert_equals stratum+tcp://127.0.0.1:3333 "${MINER_ARG_3}" "PearlHash OneZeroMiner local pool"
-  assert_equals "${WALLET_ADDRESS}" "${MINER_ARG_5}" "PearlHash OneZeroMiner wallet"
-  assert_equals --worker "${MINER_ARG_6}" "PearlHash OneZeroMiner worker option"
-  assert_equals "${WORKER_NAME}" "${MINER_ARG_7}" "PearlHash OneZeroMiner worker"
-  assert_equals "tcp://127.0.0.1:3333/pool.pearlhash.xyz:9000" "${LOCAL_FORWARD}" "PearlHash OneZeroMiner GOST forward"
+  assert_equals peryn "${ACTIVE_POOL}" "Peryn active pool"
+  assert_equals onezerominer "${ACTIVE_MINER}" "Peryn default miner"
+  assert_equals pearlhash "${MINER_ARG_1}" "Peryn OneZeroMiner algorithm"
+  assert_equals stratum+tcp://127.0.0.1:3333 "${MINER_ARG_3}" "Peryn OneZeroMiner local pool"
+  assert_equals "${WALLET_ADDRESS}" "${MINER_ARG_5}" "Peryn OneZeroMiner wallet"
+  assert_equals --worker "${MINER_ARG_6}" "Peryn OneZeroMiner worker option"
+  assert_equals "${WORKER_NAME}" "${MINER_ARG_7}" "Peryn OneZeroMiner worker"
+  assert_equals --pass "${MINER_ARG_8}" "Peryn OneZeroMiner password option"
+  assert_equals x "${MINER_ARG_9}" "Peryn OneZeroMiner password"
+  assert_equals "tcp://127.0.0.1:3333/pool.peryn.ai:3333" "${LOCAL_FORWARD}" "Peryn OneZeroMiner GOST forward"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" --pool kryptex --miner onezerominer >/dev/null
@@ -229,6 +233,7 @@ test_profile_cli() {
   output="$(GOST_THREAD_CONFIG_DIR="${config_dir}" "${ROOT_DIR}/gost-thread" profiles list)"
   [[ "${output}" == *"luckypool"* ]] || fail "profile list omitted luckypool"
   [[ "${output}" == *"kryptex"* ]] || fail "profile list omitted kryptex"
+  [[ "${output}" == *"peryn"* ]] || fail "profile list omitted peryn"
   if [[ "${output}" == *"kryptex-krig-miner"* ]]; then
     fail "profile list included a miner-specific endpoint as a pool"
   fi
@@ -236,6 +241,10 @@ test_profile_cli() {
   output="$(GOST_THREAD_CONFIG_DIR="${config_dir}" "${ROOT_DIR}/gost-thread" profiles show luckypool)"
   [[ "${output}" == *"pearl-eu1.luckypool.io:3360"* ]] || fail "profile show omitted target"
   [[ "${output}" == *"Arguments [lpminer]"* ]] || fail "profile show omitted miner args"
+
+  output="$(GOST_THREAD_CONFIG_DIR="${config_dir}" "${ROOT_DIR}/gost-thread" profiles show peryn)"
+  [[ "${output}" == *"pool.peryn.ai:3333"* ]] || fail "Peryn profile show omitted target"
+  [[ "${output}" == *"Default miner: onezerominer"* ]] || fail "Peryn profile show omitted miner"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" \
     "${ROOT_DIR}/gost-thread" profiles add fortune-test \
