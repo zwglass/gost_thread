@@ -90,7 +90,8 @@ test_switch_profile_and_runner() {
     "kryptex srbminer" \
     "kryptex peakminer" \
     "kryptex krig-miner" \
-    "peryn onezerominer"; do
+    "peryn onezerominer" \
+    "peryn mhminer"; do
     read -r pool miner <<<"${selection}"
     GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
       "${ROOT_DIR}/scripts/switch_profile.sh" --pool "${pool}" --miner "${miner}" >/dev/null
@@ -111,6 +112,22 @@ test_switch_profile_and_runner() {
   assert_equals --pass "${MINER_ARG_8}" "Peryn OneZeroMiner password option"
   assert_equals x "${MINER_ARG_9}" "Peryn OneZeroMiner password"
   assert_equals "tcp://127.0.0.1:3333/pool.peryn.ai:3333" "${LOCAL_FORWARD}" "Peryn OneZeroMiner GOST forward"
+
+  GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
+    "${ROOT_DIR}/scripts/switch_profile.sh" --pool peryn --miner mhminer >/dev/null
+  . "${config_dir}/miner.env"
+  . "${config_dir}/profiles.env"
+  . "${config_dir}/client.env"
+  assert_equals mhminer "${ACTIVE_MINER}" "Peryn MH-Miner active miner"
+  assert_equals --mine "${MINER_ARG_0}" "Peryn MH-Miner mine option"
+  assert_equals pearl "${MINER_ARG_2}" "Peryn MH-Miner algorithm"
+  assert_equals --protocol "${MINER_ARG_4}" "Peryn MH-Miner protocol option"
+  assert_equals v2 "${MINER_ARG_5}" "Peryn MH-Miner protocol"
+  assert_equals stratum+tcp://127.0.0.1:3333 "${MINER_ARG_7}" "Peryn MH-Miner local pool"
+  assert_equals "${WALLET_ADDRESS}" "${MINER_ARG_9}" "Peryn MH-Miner wallet"
+  assert_equals "${WORKER_NAME}" "${MINER_ARG_11}" "Peryn MH-Miner worker"
+  assert_equals all "${MINER_ARG_15}" "Peryn MH-Miner device"
+  assert_equals "tcp://127.0.0.1:3333/pool.peryn.ai:3333" "${LOCAL_FORWARD}" "Peryn MH-Miner GOST forward"
 
   GOST_THREAD_CONFIG_DIR="${config_dir}" GOST_THREAD_RESTART_SERVICES=0 \
     "${ROOT_DIR}/scripts/switch_profile.sh" --pool kryptex --miner onezerominer >/dev/null
